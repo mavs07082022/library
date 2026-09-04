@@ -1,0 +1,16 @@
+[
+    {
+        "id": 1,
+        "library_id": "LIB001",
+        "first_name": "CARLOS",
+        "last_name": "ESTRERA",
+        "email": "estreracarlosmavean17@gmail.com",
+        "phone": "09278878724",
+        "address": "PHASE 3 AREA A ACORDA ST. PAYATAS LUPANG PANGAKO QUEZON CITY",
+        "membership_type": "Student",
+        "join_date": "2026-07-16",
+        "expiry_date": "",
+        "is_verified": true,
+        "clearance_status": "Pending"
+    }
+]

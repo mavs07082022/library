@@ -1,0 +1,58 @@
+[
+    {
+        "id": 1,
+        "title": "Justice",
+        "author": "Michael J. Sandel",
+        "isbn": "978-037-453250-5",
+        "publisher": "Farrar, Straus and Giroux",
+        "year_published": "2010",
+        "category": "Ethics, Justice",
+        "quantity": 1,
+        "available": 1,
+        "location": "Shelf A-3, Row 1",
+        "e_book_url": "https:\/\/openlibrary.org\/books\/OL24413148M\/Justice#details",
+        "description": "what's the right thing to do?"
+    },
+    {
+        "id": 2,
+        "title": "This Book is Gay",
+        "author": "Juno Dawson",
+        "isbn": "9781492617822",
+        "publisher": "Sourcebooks Fire",
+        "year_published": "2015",
+        "category": "Non-Fiction",
+        "quantity": 1,
+        "available": 0,
+        "location": "shelf a-2",
+        "e_book_url": "https:\/\/openlibrary.org\/books\/OL26882143M\/This_book_is_gay",
+        "description": "gayness overload"
+    },
+    {
+        "id": 3,
+        "title": "Business ethics",
+        "author": "Manuel G. Velasquez",
+        "isbn": "0131930079",
+        "publisher": "Pearson Prentice Hall",
+        "year_published": "2006",
+        "category": "ethics, business",
+        "quantity": 2,
+        "available": 2,
+        "location": "shelf a-2",
+        "e_book_url": "https:\/\/openlibrary.org\/works\/OL1918427W\/Business_ethics?edition=key%3A\/books\/OL3401821M",
+        "description": ""
+    },
+    {
+        "id": 4,
+        "title": "Gray hat hacking",
+        "author": "Shon Harris,",
+        "isbn": "0072257091",
+        "publisher": "McGraw-Hill\/Osborne,",
+        "year_published": "2005",
+        "category": "",
+        "quantity": 1,
+        "available": 1,
+        "location": "shelf a2",
+        "e_book_url": "",
+        "description": ""
+    }
+]

@@ -1,0 +1,24 @@
+[
+    {
+        "id": 3,
+        "book_id": "1",
+        "member_id": "1",
+        "book_title": "Justice",
+        "member_name": "CARLOS ESTRERA",
+        "borrow_date": "2026-07-16",
+        "due_date": "2026-07-27",
+        "status": "Borrowed",
+        "fine_amount": 0
+    },
+    {
+        "id": 4,
+        "book_id": "2",
+        "member_id": "1",
+        "book_title": "This Book is Gay",
+        "member_name": "CARLOS ESTRERA",
+        "borrow_date": "2026-07-20",
+        "due_date": "2026-07-23",
+        "status": "Borrowed",
+        "fine_amount": 0
+    }
+]

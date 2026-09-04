@@ -1,0 +1,21 @@
+{
+  "services": {
+    "frontend": {
+      "root": "frontend/"
+    },
+    "backend": {
+      "root": "python/",
+      "entrypoint": "app:app"
+    }
+  },
+  "rewrites": [
+    { 
+      "source": "/api/(.*)", 
+      "destination": { "service": "backend" } 
+    },
+    { 
+      "source": "/(.*)", 
+      "destination": { "service": "frontend" } 
+    }
+  ]
+}
