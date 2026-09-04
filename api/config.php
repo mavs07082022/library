@@ -1,5 +1,5 @@
 <?php
-// api/config.php - Complete with NLP integration
+// api/config.php - Updated for HostForge deployment
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -15,19 +15,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // ============================================
 // SUPABASE CONFIGURATION
 // ============================================
-define('SUPABASE_URL', 'https://olzkpwzebcnmbqhbcyyz.supabase.co');
-define('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9semtwd3plYmNubWJxaGJjeXl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMjYxNzcsImV4cCI6MjA5OTYwMjE3N30.GNk7gwaWfi3O-dncbixlkB7M8q6R-UJUe2VMsB5cBTQ');
+define('SUPABASE_URL', getenv('SUPABASE_URL') ?: 'https://olzkpwzebcnmbqhbcyyz.supabase.co');
+define('SUPABASE_ANON_KEY', getenv('SUPABASE_ANON_KEY') ?: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9semtwd3plYmNubWJxaGJjeXl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMjYxNzcsImV4cCI6MjA5OTYwMjE3N30.GNk7gwaWfi3O-dncbixlkB7M8q6R-UJUe2VMsB5cBTQ');
 
 // ============================================
 // NLP SERVICE CONFIGURATION
 // ============================================
-define('NLP_SERVICE_URL', 'https://lib-nlp-service-2.onrender.com');
+define('NLP_SERVICE_URL', getenv('NLP_SERVICE_URL') ?: 'https://lib-nlp-service-2.onrender.com');
 define('NLP_HEALTH', NLP_SERVICE_URL . '/health');
 define('NLP_SEARCH', NLP_SERVICE_URL . '/search');
 define('NLP_PREDICT', NLP_SERVICE_URL . '/predict');
 define('NLP_CLASSIFY', NLP_SERVICE_URL . '/classify');
 define('NLP_ANALYZE', NLP_SERVICE_URL . '/analyze_session');
-define('NLP_TIMEOUT', 10);
+define('NLP_TIMEOUT', 15);
 
 // ============================================
 // SUPABASE REQUEST FUNCTION
@@ -75,12 +75,12 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null, $headers = []
 }
 
 // ============================================
-// NLP SERVICE HEALTH CHECK
+// NLP SERVICE FUNCTIONS
 // ============================================
 function isNLPServiceRunning() {
     $ch = curl_init(NLP_HEALTH);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 3);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_NOBODY, false);
@@ -90,6 +90,27 @@ function isNLPServiceRunning() {
     curl_close($ch);
     
     return ($httpCode === 200 && $response !== false);
+}
+
+function callNLPService($endpoint, $payload) {
+    $ch = curl_init($endpoint);
+    curl_setopt($ch, CURLOPT_POST, true);
+    curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
+    curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_TIMEOUT, NLP_TIMEOUT);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    
+    $response = curl_exec($ch);
+    $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    curl_close($ch);
+    
+    if ($httpCode === 200 && $response) {
+        return json_decode($response, true);
+    }
+    
+    return null;
 }
 
 // ============================================
