@@ -9,8 +9,8 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
 define('SUPABASE_URL', 'https://olzkpwzebcnmbqhbcyyz.supabase.co');
 define('SUPABASE_ANON_KEY', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9semtwd3plYmNubWJxaGJjeXl6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwMjYxNzcsImV4cCI6MjA5OTYwMjE3N30.GNk7gwaWfi3O-dncbixlkB7M8q6R-UJUe2VMsB5cBTQ');
 
-define('NLP_SERVICE_SEARCH', 'http://localhost:5000/search');
-define('NLP_SERVICE_HEALTH', 'http://localhost:5000/health');
+define('NLP_SERVICE_SEARCH', 'https://lib-nlp-service-2.onrender.com/search');
+define('NLP_SERVICE_HEALTH', 'https://lib-nlp-service-2.onrender.com/health');
 define('NLP_TIMEOUT', 8);
 define('PYTHON_PATH', 'python');
 define('NLP_SCRIPT_PATH', 'C:\\xampp\\htdocs\\lib\\python\\app.py');

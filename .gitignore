@@ -1,0 +1,53 @@
+# Python files (already deployed on Render)
+python/
+*.py
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+venv/
+env/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Composer
+vendor/
+composer.lock
+
+# Logs
+*.log
+error_log
+
+# Uploads (created by system)
+uploads/
+temp/
+logs/
+
+# PHPMailer (if using composer)
+phpmailer/
+PHPMailer/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Hidden files
+*.tmp
+*.cache
+*.sqlite

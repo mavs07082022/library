@@ -630,7 +630,7 @@ if ($section === 'books' && $action === 'add_book' && $_SERVER['REQUEST_METHOD']
             if (!empty($result) && isset($result[0]['id'])) {
                 $bookId = $result[0]['id'];
                 // Call classification API asynchronously
-                $ch = curl_init('api\classify_book.php');
+                $ch = curl_init('https://lib-nlp-service-2.onrender.com/classify');
                 curl_setopt($ch, CURLOPT_POST, true);
                 curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode([
                     'book_id' => $bookId,

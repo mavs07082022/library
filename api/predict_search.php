@@ -93,7 +93,7 @@ function callNLPServiceForPrediction($partialQuery, $gradeLevel, $subjects, $his
         ];
         
         // Call the NLP service
-        $ch = curl_init('http://localhost:5000/predict');
+        $ch = curl_init('https://lib-nlp-service-2.onrender.com/predict');
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($payload));
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
