@@ -29,6 +29,7 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
 
     if ($method === 'POST') {
@@ -52,18 +53,40 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     return json_decode($response, true);
 }
 
+// ============================================
+// NLP SERVICE HEALTH CHECK - FIXED
+// ============================================
 function isNLPServiceRunning() {
     $ch = curl_init(NLP_SERVICE_HEALTH);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 2);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_NOBODY, false);
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
     
-    return ($httpCode === 200 && $response !== false);
+    // Check if response is valid AND model is loaded
+    if ($httpCode === 200 && $response !== false) {
+        try {
+            $data = json_decode($response, true);
+            // Check if model_loaded is true
+            if (isset($data['model_loaded']) && $data['model_loaded'] === true) {
+                return true;
+            }
+            // Also check semantic_available as fallback
+            if (isset($data['semantic_available']) && $data['semantic_available'] === true) {
+                return true;
+            }
+        } catch (Exception $e) {
+            // If JSON parsing fails, fall back to HTTP check
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 function startNLPService() {
@@ -121,6 +144,9 @@ function ensureNLPServiceRunning() {
     return false;
 }
 
+// ============================================
+// PERFORM NLP SEARCH - FIXED
+// ============================================
 function performNLPSearch($query) {
     ensureNLPServiceRunning();
     
@@ -138,7 +164,7 @@ function performNLPSearch($query) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_TIMEOUT, NLP_TIMEOUT);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);  // ← ADDED THIS LINE
     
     $response = curl_exec($ch);
     $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -528,17 +554,26 @@ try {
     if (!empty($searchQuery)) {
         $startTime = microtime(true);
         
-        $nlpResults = performNLPSearch($searchQuery);
+        // Check if NLP is available with model loaded
+        $nlpAvailable = isNLPServiceRunning();
         
-        if ($nlpResults !== null && !empty($nlpResults['results'])) {
-            $searchResults = $nlpResults['results'];
-            $searchTypeUsed = $nlpResults['type'] ?? 'semantic';
-            $nlpAvailable = true;
-            $errorMessage = '';
+        if ($nlpAvailable) {
+            $nlpResults = performNLPSearch($searchQuery);
+            
+            if ($nlpResults !== null && !empty($nlpResults['results'])) {
+                $searchResults = $nlpResults['results'];
+                $searchTypeUsed = $nlpResults['type'] ?? 'semantic';
+                $nlpAvailable = true;
+                $errorMessage = '';
+            } else {
+                // NLP returned no results, fallback to basic
+                $searchResults = performBasicSearch($allBooks, $searchQuery);
+                $searchTypeUsed = 'basic_fallback';
+                $errorMessage = 'NLP search returned no results, using basic search';
+            }
         } else {
             $searchResults = performBasicSearch($allBooks, $searchQuery);
             $searchTypeUsed = 'basic';
-            $nlpAvailable = false;
             $errorMessage = 'NLP service unavailable, using basic search';
         }
         
@@ -608,7 +643,7 @@ function displayCoverImage($coverImage, $title, $id) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Dashboard - St. Agnes Academy</title>
     <style>
-        /* [All original styles remain unchanged] */
+        /* [All original styles remain unchanged - keeping the same as your existing file] */
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
