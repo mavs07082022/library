@@ -1,0 +1,13 @@
+{
+    "name": "st-agnes/library-management",
+    "description": "St. Agnes Academy Library Management System",
+    "type": "project",
+    "require": {
+        "phpmailer/phpmailer": "^6.8"
+    },
+    "config": {
+        "optimize-autoloader": true,
+        "preferred-install": "dist",
+        "sort-packages": true
+    }
+}

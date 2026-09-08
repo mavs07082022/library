@@ -51,3 +51,11 @@ PHPMailer/
 *.tmp
 *.cache
 *.sqlite
+
+# Composer dependencies
+vendor/
+composer.lock
+composer.phar
+
+# Don't ignore composer.json - we need it!
+# composer.json  ← Make sure this is NOT ignored

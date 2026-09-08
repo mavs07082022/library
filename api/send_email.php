@@ -11,25 +11,62 @@ if (file_exists(__DIR__ . '/email_config.php')) {
 }
 
 // ============================================
-// LOAD PHPMailer - Check multiple locations
+// LOAD PHPMailer - First try Composer, then fallback
 // ============================================
-$phpmailerPaths = [
-    __DIR__ . '/phpmailer/src/PHPMailer.php',
-    __DIR__ . '/../phpmailer/src/PHPMailer.php',
-    __DIR__ . '/../vendor/phpmailer/phpmailer/src/PHPMailer.php',
-    __DIR__ . '/../../vendor/phpmailer/phpmailer/src/PHPMailer.php',
-    'C:/xampp/htdocs/lib/vendor/phpmailer/phpmailer/src/PHPMailer.php',
-];
-
 $loaded = false;
-foreach ($phpmailerPaths as $path) {
-    if (file_exists($path)) {
-        require_once $path;
-        $basePath = dirname($path);
-        require_once $basePath . '/SMTP.php';
-        require_once $basePath . '/Exception.php';
-        $loaded = true;
-        break;
+
+// 1. Try Composer autoloader (recommended)
+if (file_exists(__DIR__ . '/../vendor/autoload.php')) {
+    require_once __DIR__ . '/../vendor/autoload.php';
+    $loaded = true;
+}
+
+// 2. Fallback: Try manual paths if Composer not available
+if (!$loaded) {
+    $phpmailerPaths = [
+        __DIR__ . '/phpmailer/src/PHPMailer.php',
+        __DIR__ . '/../phpmailer/src/PHPMailer.php',
+        __DIR__ . '/../../phpmailer/src/PHPMailer.php',
+        __DIR__ . '/../vendor/phpmailer/phpmailer/src/PHPMailer.php',
+    ];
+    
+    foreach ($phpmailerPaths as $path) {
+        if (file_exists($path)) {
+            require_once $path;
+            $basePath = dirname($path);
+            if (file_exists($basePath . '/SMTP.php')) {
+                require_once $basePath . '/SMTP.php';
+            }
+            if (file_exists($basePath . '/Exception.php')) {
+                require_once $basePath . '/Exception.php';
+            }
+            $loaded = true;
+            break;
+        }
+    }
+}
+
+// 3. Final fallback: Check multiple locations
+if (!$loaded) {
+    $fallbackPaths = [
+        __DIR__ . '/phpmailer/src/PHPMailer.php',
+        __DIR__ . '/../phpmailer/src/PHPMailer.php',
+        __DIR__ . '/../../phpmailer/src/PHPMailer.php',
+        'C:/xampp/htdocs/lib/vendor/phpmailer/phpmailer/src/PHPMailer.php',
+    ];
+    foreach ($fallbackPaths as $path) {
+        if (file_exists($path)) {
+            require_once $path;
+            $basePath = dirname($path);
+            if (file_exists($basePath . '/SMTP.php')) {
+                require_once $basePath . '/SMTP.php';
+            }
+            if (file_exists($basePath . '/Exception.php')) {
+                require_once $basePath . '/Exception.php';
+            }
+            $loaded = true;
+            break;
+        }
     }
 }
 
@@ -71,7 +108,7 @@ function sendOTPEmail($to, $otp, $fullName = 'Student', $purpose = 'registration
         
         if (file_exists($imagePath)) {
             $mail->AddEmbeddedImage($imagePath, $imageCID, 'bcpd.png', 'base64', 'image/png');
-            $logoHtml = '<img src="cid:' . $imageCID . '" alt="Bestlink College of the Philippines" class="logo-image" style="max-width:80px;height:auto;display:block;margin:0 auto 10px auto;">';
+            $logoHtml = '<img src="cid:' . $imageCID . '" alt="St. Agnes Academy" class="logo-image" style="max-width:80px;height:auto;display:block;margin:0 auto 10px auto;">';
         } else {
             // Fallback if image not found
             $logoHtml = '<span style="font-size:48px;display:block;margin-bottom:10px;">📚</span>';
@@ -538,7 +575,6 @@ if (basename($_SERVER['PHP_SELF']) === 'send_email.php' && isset($_GET['test']))
             echo '<p>Image size: ' . filesize($imagePath) . ' bytes</p>';
         } else {
             echo '<p style="color:red;">❌ Image NOT found at: ' . $imagePath . '</p>';
-            echo '<p>Please check if the image exists at: <strong>C:\xampp\htdocs\lib\frontend\src\img\agustinnb.png</strong></p>';
         }
     } else {
         echo '<p style="color:red;font-size:18px;">❌ Failed to send email!</p>';
