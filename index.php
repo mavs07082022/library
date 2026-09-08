@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_URI'] === '/' ||
     exit;
 }
 
-// Redirect to homepage using URL path (NOT file path)
-header('Location: /frontend/src/homepage.php');
+// Serve the homepage directly - NO REDIRECTS!
+include __DIR__ . '/frontend/src/homepage.php';
 exit;
 ?>
