@@ -551,7 +551,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 <div class="register-link">
                     <p style="text-align:center;margin-top:14px;font-size:14px;color:#8a7a6e;">
-                        Don't have an account? <a href="\update-lib\student_register.php">Register here</a>
+                        Don't have an account? <a href="/student_register.php">Register here</a>
                     </p>
                 </div>
             </div>
