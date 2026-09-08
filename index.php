@@ -1,8 +1,8 @@
 <?php
-// index.php - Root entry point for HostForge
+// index.php - Entry point for HostForge
 
 // ============================================
-// HEALTH CHECK - For HostForge
+// 1. HEALTH CHECK - Respond immediately
 // ============================================
 if ($_SERVER['REQUEST_URI'] === '/' || 
     $_SERVER['REQUEST_URI'] === '/health' || 
@@ -13,60 +13,54 @@ if ($_SERVER['REQUEST_URI'] === '/' ||
 }
 
 // ============================================
-// ROUTE TO FILES IN frontend/src/
+// 2. ROUTING - Send all other requests to frontend/src/
 // ============================================
-$uri = ltrim($_SERVER['REQUEST_URI'], '/');
+$requestUri = ltrim($_SERVER['REQUEST_URI'], '/');
 
-// Remove query string
-if (strpos($uri, '?') !== false) {
-    $uri = substr($uri, 0, strpos($uri, '?'));
+// Remove query string if present
+if (strpos($requestUri, '?') !== false) {
+    $requestUri = substr($requestUri, 0, strpos($requestUri, '?'));
 }
 
-// If empty -> go to homepage
-if (empty($uri)) {
-    include __DIR__ . '/frontend/src/homepage.php';
-    exit;
-}
+// Map root requests to frontend/src/
+// e.g., /login -> /frontend/src/login.php
+$basePath = __DIR__ . '/frontend/src/';
+$targetFile = $basePath . $requestUri;
 
-// Check if file exists in frontend/src/
-if (file_exists(__DIR__ . '/frontend/src/' . $uri)) {
-    // Serve PHP files
-    if (pathinfo($uri, PATHINFO_EXTENSION) === 'php') {
-        include __DIR__ . '/frontend/src/' . $uri;
+// If the request is for a specific file (e.g., login.php, student_dashboard.php)
+if (file_exists($targetFile) && is_file($targetFile)) {
+    // Serve PHP files directly
+    if (pathinfo($targetFile, PATHINFO_EXTENSION) === 'php') {
+        include $targetFile;
         exit;
     }
-    // Serve static files (images, css, js)
-    $ext = pathinfo($uri, PATHINFO_EXTENSION);
+    // Serve static files (images, css, etc.)
+    $ext = pathinfo($targetFile, PATHINFO_EXTENSION);
     $mime_types = [
-        'png' => 'image/png',
-        'jpg' => 'image/jpeg',
-        'jpeg' => 'image/jpeg',
-        'gif' => 'image/gif',
-        'svg' => 'image/svg+xml',
-        'ico' => 'image/x-icon',
-        'css' => 'text/css',
-        'js' => 'application/javascript'
+        'png' => 'image/png', 'jpg' => 'image/jpeg', 'jpeg' => 'image/jpeg',
+        'gif' => 'image/gif', 'svg' => 'image/svg+xml', 'ico' => 'image/x-icon',
+        'css' => 'text/css', 'js' => 'application/javascript'
     ];
     if (isset($mime_types[$ext])) {
         header('Content-Type: ' . $mime_types[$ext]);
     }
-    readfile(__DIR__ . '/frontend/src/' . $uri);
+    readfile($targetFile);
     exit;
 }
 
-// Try with .php extension
-if (file_exists(__DIR__ . '/frontend/src/' . $uri . '.php')) {
-    include __DIR__ . '/frontend/src/' . $uri . '.php';
+// If the request is for a PHP file without extension (e.g., /login)
+if (file_exists($basePath . $requestUri . '.php')) {
+    include $basePath . $requestUri . '.php';
     exit;
 }
 
-// Check if it's in root (for admin_logout.php)
-if (file_exists(__DIR__ . '/' . $uri . '.php')) {
-    include __DIR__ . '/' . $uri . '.php';
+// If the request is for the homepage (e.g., /homepage or just /)
+if (empty($requestUri) || $requestUri === 'homepage') {
+    include $basePath . 'homepage.php';
     exit;
 }
 
-// 404
-http_response_code(404);
-echo "404 - Page Not Found";
+// If nothing matches, serve the homepage as a fallback
+include $basePath . 'homepage.php';
+exit;
 ?>
