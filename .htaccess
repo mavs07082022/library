@@ -1,9 +1,6 @@
-# .htaccess - Root directory
-
-# Set index.php as default
+# .htaccess
 DirectoryIndex index.php
 
-# Enable rewrite engine
 RewriteEngine On
 
 # If request is for a real file or directory, serve it
@@ -11,5 +8,8 @@ RewriteCond %{REQUEST_FILENAME} -f [OR]
 RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Route everything to index.php
+# Redirect root to frontend/src/homepage.php
+RewriteRule ^$ frontend/src/homepage.php [L]
+
+# Route everything else to index.php
 RewriteRule ^ index.php [L]
