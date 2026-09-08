@@ -630,7 +630,7 @@
                         <a href="#features">Features</a>
                         <a href="#overview">Overview</a>
                         <a href="#contact">Contact</a>
-                        <a href="login.php" class="btn-primary">Sign In</a>
+                        <a href="/update-libV2/frontend/src/login.php" class="btn-primary">Sign In</a>
                     </div>
                 </div>
             </header>

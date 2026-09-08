@@ -1,13 +1,15 @@
-# Set default index
-DirectoryIndex index.php homepage.php
+# .htaccess - Root directory
 
-# Redirect root to index.php
+# Set index.php as default
+DirectoryIndex index.php
+
+# Enable rewrite engine
 RewriteEngine On
-RewriteRule ^$ index.php [L]
 
-# If file exists, serve it
-RewriteCond %{REQUEST_FILENAME} -f
+# If request is for a real file or directory, serve it
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
 RewriteRule ^ - [L]
 
-# Otherwise route to index.php
-RewriteRule ^(.*)$ index.php [QSA,L]
+# Route everything to index.php
+RewriteRule ^ index.php [L]
