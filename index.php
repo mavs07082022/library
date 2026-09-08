@@ -10,7 +10,7 @@ if ($_SERVER['REQUEST_URI'] === '/' ||
     exit;
 }
 
-// Redirect to homepage
-header('Location: /frontend/src/homepage.php');
+// Redirect to homepage using full path
+header('Location: ' . $_SERVER['DOCUMENT_ROOT'] . '/frontend/src/homepage.php');
 exit;
 ?>
