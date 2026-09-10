@@ -59,7 +59,7 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
 function isNLPServiceRunning() {
     $ch = curl_init(NLP_SERVICE_HEALTH);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 5);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 60);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_NOBODY, false);
