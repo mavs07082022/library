@@ -144,7 +144,6 @@ try {
 if ($section === 'request_form' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $bookId = $_POST['book_id'] ?? '';
     $requestType = $_POST['request_type'] ?? '';
-    // Use session data for credentials (fixed)
     $fullName = $_SESSION['full_name'] ?? '';
     $studentId = $studentData['student_id'] ?? $_SESSION['user_id_display'] ?? '';
     $yearLevel = $studentData['year_level'] ?? '';
@@ -370,6 +369,17 @@ function hasValidCoverImage($coverImage) {
     if (filter_var($coverImage, FILTER_VALIDATE_URL)) return true;
     return false;
 }
+
+// ============================================
+// DYNAMIC BASE PATH FOR FIREBASE FILES
+// Computes the path from this file's location to the site root.
+// Example: /library/frontend/src/students/student_dashboard.php
+//          → dirname x4 → /library
+// If deployed at root: /frontend/src/students/student_dashboard.php
+//          → dirname x4 → (empty string, meaning site root)
+// ============================================
+$basePath = dirname(dirname(dirname(dirname($_SERVER['PHP_SELF']))));
+if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = '';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -378,10 +388,10 @@ function hasValidCoverImage($coverImage) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes">
     <title>Student Dashboard - St. Agnes Academy</title>
     <link rel="icon" href="/favicon.ico" sizes="any">
-<link rel="icon" type="image/png" sizes="96x96" href="/img/favicon-96x96.png">
-<link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
-<link rel="manifest" href="/site.webmanifest">
-<meta name="theme-color" content="#e51d66">
+    <link rel="icon" type="image/png" sizes="96x96" href="/img/favicon-96x96.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <meta name="theme-color" content="#e51d66">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
         html { -webkit-text-size-adjust: 100%; }
@@ -711,23 +721,15 @@ function hasValidCoverImage($coverImage) {
         /* ============================================
            RESPONSIVE BREAKPOINTS
            ============================================ */
-
-        /* --- Large tablet --- */
         @media (max-width: 1200px) {
             .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         }
-
-        /* --- Tablet --- */
         @media (max-width: 992px) {
             .student-content { padding: 80px 24px 24px; }
             .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .book-grid { grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
             .quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
-
-        /* =========================================
-           MOBILE / TABLET: Sidebar slides in below header
-           ========================================= */
         @media (max-width: 900px) {
             .top-header { left: 0 !important; right: 0 !important; padding: 0 12px; height: 56px; z-index: 1100; }
             .top-header.collapsed { left: 0 !important; }
@@ -768,50 +770,35 @@ function hasValidCoverImage($coverImage) {
             .student-content.collapsed { margin-left: 0 !important; }
 
             .mobile-overlay { z-index: 1040; }
-
             .dashboard-header { flex-direction: column; align-items: flex-start; padding: 20px; gap: 12px; }
             .header-time { text-align: left; width: 100%; }
-
             .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
             .quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
-
-        /* --- Small tablet / large phone --- */
         @media (max-width: 768px) {
             .top-header { padding: 0 10px; height: 54px; }
             .header-nav-symbols a { width: 34px; height: 34px; font-size: 15px; }
             .hamburger-btn { width: 36px; height: 36px; }
-
             .student-sidebar { top: 54px !important; height: calc(100vh - 54px) !important; }
             .student-content { padding: 70px 14px 24px; }
-
             .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
             .stat-number { font-size: 20px; }
             .stat-label { font-size: 11px; }
-
             .dashboard-header h1 { font-size: 18px; }
             .header-time .time { font-size: 17px; }
-
             .quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
             .section-header { flex-direction: column; align-items: flex-start; }
             .section-header h1 { font-size: 18px; }
-
             .status-card { flex-direction: column; align-items: flex-start; gap: 10px; }
-
             .request-form-container { padding: 24px 20px; }
             .profile-container { padding: 24px 20px; }
             .profile-avatar { width: 64px; height: 64px; font-size: 26px; }
-
             .modal-content { padding: 22px 18px; border-radius: 14px; }
             .modal-content .modal-header h2 { font-size: 17px; }
-
             .data-table th, .data-table td { padding: 10px 12px; font-size: 13px; }
-
             .book-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
             .book-card .book-cover-wrapper { height: 170px; }
         }
-
-        /* --- Phone --- */
         @media (max-width: 480px) {
             .top-header { padding: 0 8px; height: 52px; }
             .header-left-group { gap: 8px; }
@@ -820,88 +807,72 @@ function hasValidCoverImage($coverImage) {
             .header-nav-symbols { gap: 1px; }
             .header-nav-symbols a { width: 32px; height: 32px; font-size: 14px; border-radius: 7px; }
             .header-nav-symbols a .header-badge { font-size: 8px; min-width: 13px; height: 13px; top: 2px; right: 2px; padding: 0 3px; }
-
             .student-sidebar { top: 52px !important; height: calc(100vh - 52px) !important; width: 270px !important; }
             .student-content { padding: 66px 10px 20px; }
-
-            /* Force 2 columns with equal width */
             .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
             .stat-card { padding: 12px 8px; border-radius: 10px; }
             .stat-number { font-size: 18px; line-height: 1.1; }
             .stat-label { font-size: 10px; margin-top: 4px; line-height: 1.2; }
-
             .dashboard-header { padding: 16px; border-radius: 12px; }
             .dashboard-header h1 { font-size: 16px; }
             .header-date { font-size: 12px; }
             .header-time { padding: 8px 14px; }
             .header-time .time { font-size: 16px; }
             .header-time .date { font-size: 11px; }
-
             .quick-actions { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 8px; }
             .quick-action-card { padding: 14px 8px; border-radius: 10px; }
             .action-icon { font-size: 20px; margin-bottom: 4px; }
             .action-label { font-size: 11px; line-height: 1.2; }
-
             .section-header h1 { font-size: 16px; }
-
             .message { padding: 11px 14px; font-size: 12px; border-radius: 8px; }
-
             .status-card { padding: 14px 16px; border-radius: 10px; }
             .status-info .status-title { font-size: 14px; }
             .status-info .status-desc { font-size: 12px; }
             .status-badge-large { padding: 3px 12px; font-size: 11px; }
-
             .book-grid { grid-template-columns: 1fr !important; gap: 14px; }
             .book-card .book-cover-wrapper { height: 220px; }
             .book-card .book-info { padding: 14px 16px 18px; }
-
             .search-bar { flex-direction: column; align-items: stretch; gap: 10px; }
             .search-bar .search-input-wrapper { min-width: 0; width: 100%; }
             .search-bar button { width: 100%; }
-
             .request-form-container { padding: 20px 16px; border-radius: 12px; }
             .request-form-container .form-actions { flex-direction: column-reverse; }
             .request-form-container .form-actions .btn-submit,
             .request-form-container .form-actions .btn-cancel { width: 100%; text-align: center; }
-
             .request-item { padding: 14px 16px; }
             .request-item .request-status { align-self: flex-start; }
-
             .modal-content { padding: 18px 14px; border-radius: 12px; }
             .modal-content .form-actions { flex-direction: column-reverse; }
             .modal-content .form-actions .btn-primary,
             .modal-content .form-actions .btn-secondary { width: 100%; }
-
             .data-table th, .data-table td { padding: 9px 10px; font-size: 12px; }
             .data-table { min-width: 480px; }
-
             .profile-container { padding: 20px 16px; border-radius: 12px; }
-
             .ai-assistant-popup { bottom: 12px; right: 12px; left: 12px; max-width: none; padding: 18px 20px; }
         }
-
-        /* --- Very small phone --- */
         @media (max-width: 360px) {
             .header-nav-symbols a { width: 30px; height: 30px; font-size: 13px; }
             .hamburger-btn { width: 32px; height: 32px; }
             .stat-number { font-size: 16px; }
             .action-label { font-size: 10px; }
         }
-
-        /* --- Touch devices: disable hover transforms --- */
         @media (hover: none) {
             .stat-card:hover, .quick-action-card:hover, .book-card:hover { transform: none; }
         }
     </style>
     
-    <!-- Firebase AI Logic -->
-    <script src="/update-libV2_V2/firebase_config.js"></script>
-    <script src="/update-libV2_V2/ai_functions.js"></script>
+    <!-- Firebase AI Logic - Dynamic path resolution -->
+    <script src="<?php echo $basePath; ?>/firebase_config.js"></script>
+    <script src="<?php echo $basePath; ?>/ai_functions.js"></script>
     <script>
     document.addEventListener('DOMContentLoaded', async function() {
         try {
-            await window.firebaseServices.initialize();
-            console.log('✅ Firebase AI ready for student dashboard');
+            if (window.firebaseServices && typeof window.firebaseServices.initialize === 'function') {
+                await window.firebaseServices.initialize();
+                console.log('✅ Firebase AI ready for student dashboard');
+            } else {
+                console.error('❌ firebaseServices not available - check if firebase_config.js loaded');
+            }
         } catch (err) {
             console.error('❌ Firebase init failed:', err);
         }
@@ -909,13 +880,11 @@ function hasValidCoverImage($coverImage) {
     </script>
 </head>
 <body>
-    <!-- ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== -->
     <header class="top-header" id="topHeader">
         <div class="header-left-group">
             <button class="hamburger-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle Sidebar">
                 <span class="hamburger-lines"><span></span><span></span><span></span></span>
             </button>
-            
         </div>
         <nav class="header-nav-symbols">
             <a href="student_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Dashboard">
@@ -1221,7 +1190,6 @@ function hasValidCoverImage($coverImage) {
                     <input type="hidden" name="book_id" value="<?php echo htmlspecialchars($requestBookId); ?>">
                     <input type="hidden" name="request_type" value="<?php echo htmlspecialchars($requestType); ?>">
                     
-                    <!-- FIXED CREDENTIALS: Using session and student data from account creation -->
                     <div class="form-group">
                         <label>Full Name <span class="required">*</span></label>
                         <input type="text" name="full_name" value="<?php echo htmlspecialchars($_SESSION['full_name'] ?? ''); ?>" disabled required>
@@ -1433,7 +1401,6 @@ function hasValidCoverImage($coverImage) {
         </div>
     </div>
 
-    <!-- BORROW MODAL -->
     <div class="modal-overlay" id="borrowModal">
         <div class="modal-content">
             <div class="modal-header">
@@ -1463,7 +1430,6 @@ function hasValidCoverImage($coverImage) {
         const userSubjects = <?php echo json_encode(array_column($studentSubjects, 'subject_name')); ?>;
         const userHistory = <?php echo json_encode(array_column($userSearchHistory, 'query')); ?>;
 
-        /* ===== SIDEBAR TOGGLE (HAMBURGER) ===== */
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const content = document.getElementById('studentContent');
@@ -1608,7 +1574,7 @@ function hasValidCoverImage($coverImage) {
 
             try {
                 let results;
-                if (window.firebaseServices && window.firebaseServices.isReady) {
+                if (window.firebaseServices && window.firebaseServices.isReady && window.aiFunctions && window.aiFunctions.semanticSearch) {
                     results = await window.aiFunctions.semanticSearch(query, allBooks, 20);
                     aiStatus.innerHTML = '<span style="color:#34a853;">●</span> AI Online';
                     badge.textContent = '🧠 AI Search';
@@ -1624,7 +1590,7 @@ function hasValidCoverImage($coverImage) {
                 searchSession.queries.push(query);
                 searchSession.clicks.push(0);
                 
-                if (searchSession.queries.length >= 3 && searchSession.queries.length % 3 === 0 && window.firebaseServices && window.firebaseServices.isReady) {
+                if (searchSession.queries.length >= 3 && searchSession.queries.length % 3 === 0 && window.firebaseServices && window.firebaseServices.isReady && window.aiFunctions && window.aiFunctions.analyzeSession) {
                     const analysis = await window.aiFunctions.analyzeSession(
                         searchSession.queries,
                         searchSession.clicks,
@@ -1761,7 +1727,7 @@ function hasValidCoverImage($coverImage) {
             const container = document.getElementById('predictiveResults');
             if (!container) return;
 
-            if (!window.firebaseServices || !window.firebaseServices.isReady) return;
+            if (!window.firebaseServices || !window.firebaseServices.isReady || !window.aiFunctions || !window.aiFunctions.predictSearch) return;
 
             container.innerHTML = '<div class="loading-predictions"><div class="spinner"></div> Predicting...</div>';
             container.classList.add('visible');
