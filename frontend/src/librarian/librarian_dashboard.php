@@ -1228,20 +1228,20 @@ function hasValidCoverImage($coverImage) {
             <button class="hamburger-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle Sidebar">
                 <span class="hamburger-lines"><span></span><span></span><span></span></span>
             </button>
-            <span class="header-title-symbol">🖥</span>
+            
         </div>
         <nav class="header-nav-symbols">
             <a href="librarian_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Dashboard">
-                <span>◆</span>
+                <span>🗠</span>
             </a>
             <a href="librarian_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>" title="Books">
-                <span>▣</span>
+                <span>🕮</span>
             </a>
             <a href="librarian_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>" title="Borrowings">
-                <span>◈</span>
+                <span>🕮🡪</span>
             </a>
             <a href="librarian_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines">
-                <span>◉</span>
+                <span>₱ </span>
             </a>
         </nav>
     </header>
@@ -1259,19 +1259,19 @@ function hasValidCoverImage($coverImage) {
             </div>
             <nav class="sidebar-nav">
                 <a href="librarian_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>">
-                    <span class="nav-icon">◆</span>
+                    <span class="nav-icon">🗠</span>
                     <span class="nav-label">Dashboard</span>
                 </a>
                 <a href="librarian_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>">
-                    <span class="nav-icon">▣</span>
+                    <span class="nav-icon">🕮</span>
                     <span class="nav-label">Books</span>
                 </a>
                 <a href="librarian_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>">
-                    <span class="nav-icon">◈</span>
+                    <span class="nav-icon">🕮🡪</span>
                     <span class="nav-label">Borrowings</span>
                 </a>
                 <a href="librarian_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>">
-                    <span class="nav-icon">◉</span>
+                    <span class="nav-icon">₱</span>
                     <span class="nav-label">Fines</span>
                 </a>
             </nav>
