@@ -1,0 +1,10 @@
+# nixpacks.toml - Explicitly configure PHP for HostForge
+
+[variables]
+# Set the server root to the root of your project.
+# This tells Nginx where to look for your files.
+NIXPACKS_PHP_ROOT_DIR = "/app"
+
+# Set the fallback path to your main entry point.
+# This is important if your index.php is used to route requests.
+NIXPACKS_PHP_FALLBACK_PATH = "/index.php"
