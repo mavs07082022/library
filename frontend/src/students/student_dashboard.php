@@ -144,10 +144,11 @@ try {
 if ($section === 'request_form' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $bookId = $_POST['book_id'] ?? '';
     $requestType = $_POST['request_type'] ?? '';
-    $fullName = trim($_POST['full_name'] ?? '');
-    $studentId = trim($_POST['student_id'] ?? '');
-    $yearLevel = trim($_POST['year_level'] ?? '');
-    $reqSection = trim($_POST['section'] ?? '');
+    // Use session data for credentials (fixed)
+    $fullName = $_SESSION['full_name'] ?? '';
+    $studentId = $studentData['student_id'] ?? $_SESSION['user_id_display'] ?? '';
+    $yearLevel = $studentData['year_level'] ?? '';
+    $reqSection = $studentData['section'] ?? '';
     $purpose = trim($_POST['purpose'] ?? '');
     
     $errors = [];
@@ -612,6 +613,7 @@ function hasValidCoverImage($coverImage) {
         .request-form-container .form-group input, .request-form-container .form-group select, .request-form-container .form-group textarea { width: 100%; padding: 10px 14px; border: 2px solid #e8e0d8; border-radius: 10px; font-size: 14px; transition: border-color 0.2s ease; background: #ffffff; color: #1a1a1a; font-family: inherit; }
         .request-form-container .form-group input:focus, .request-form-container .form-group select:focus, .request-form-container .form-group textarea:focus { border-color: #d4a0a0; outline: none; box-shadow: 0 0 0 3px rgba(212,160,160,0.12); }
         .request-form-container .form-group textarea { resize: vertical; min-height: 80px; }
+        .request-form-container .form-group input[disabled], .request-form-container .form-group select[disabled] { background: #f5f3f0; color: #6a5a4e; cursor: not-allowed; }
         .request-form-container .form-actions { display: flex; gap: 12px; margin-top: 24px; padding-top: 16px; border-top: 1px solid #f0edea; }
         .request-form-container .form-actions .btn-submit { flex: 1; padding: 12px 28px; background: #1a1a1a; color: #f0e8e0; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
         .request-form-container .form-actions .btn-cancel { padding: 12px 24px; background: #f0edea; color: #4a3a2e; border: none; border-radius: 10px; font-size: 15px; font-weight: 500; cursor: pointer; transition: all 0.2s ease; text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
@@ -908,7 +910,7 @@ function hasValidCoverImage($coverImage) {
             <button class="hamburger-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle Sidebar">
                 <span class="hamburger-lines"><span></span><span></span><span></span></span>
             </button>
-            <span class="header-title-symbol">🖥</span>
+            
         </div>
         <nav class="header-nav-symbols">
             <a href="student_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Dashboard">
@@ -1050,19 +1052,19 @@ function hasValidCoverImage($coverImage) {
 
                 <div class="quick-actions">
                     <a href="student_dashboard.php?section=search" class="quick-action-card">
-                        <span class="action-icon">◐</span>
+                        <span class="action-icon">🕮</span>
                         <span class="action-label">Search Books</span>
                     </a>
                     <a href="student_dashboard.php?section=borrowings" class="quick-action-card">
-                        <span class="action-icon">◈</span>
+                        <span class="action-icon">⎘</span>
                         <span class="action-label">My Borrowings</span>
                     </a>
                     <a href="student_dashboard.php?section=reservations" class="quick-action-card">
-                        <span class="action-icon">◑</span>
+                        <span class="action-icon">⏱</span>
                         <span class="action-label">Reservations</span>
                     </a>
                     <a href="student_dashboard.php?section=requests" class="quick-action-card" style="position:relative;">
-                        <span class="action-icon">📋</span>
+                        <span class="action-icon">🖺</span>
                         <span class="action-label">My Requests</span>
                         <?php if (!empty($pendingRequests)): ?>
                             <span class="action-badge"><?php echo count($pendingRequests); ?></span>
@@ -1189,7 +1191,7 @@ function hasValidCoverImage($coverImage) {
             <?php elseif ($section === 'request_form'): ?>
             <div class="request-form-container">
                 <div class="form-header">
-                    <h1 style="margin:0;font-size:22px;color:#1a1a1a;font-weight:600;">📋 Book Request Form</h1>
+                    <h1 style="margin:0;font-size:22px;color:#1a1a1a;font-weight:600;">🖺 Book Request Form</h1>
                     <p style="color:#6a5a4e;font-size:14px;margin:4px 0 0;">Please fill out this form to request a book.</p>
                     
                     <?php if (!empty($requestBookData)): ?>
@@ -1214,19 +1216,20 @@ function hasValidCoverImage($coverImage) {
                     <input type="hidden" name="book_id" value="<?php echo htmlspecialchars($requestBookId); ?>">
                     <input type="hidden" name="request_type" value="<?php echo htmlspecialchars($requestType); ?>">
                     
+                    <!-- FIXED CREDENTIALS: Using session and student data from account creation -->
                     <div class="form-group">
                         <label>Full Name <span class="required">*</span></label>
-                        <input type="text" name="full_name" value="<?php echo htmlspecialchars($_SESSION['full_name'] ?? ''); ?>" required>
+                        <input type="text" name="full_name" value="<?php echo htmlspecialchars($_SESSION['full_name'] ?? ''); ?>" disabled required>
                     </div>
                     
                     <div class="form-group">
                         <label>Student ID <span class="required">*</span></label>
-                        <input type="text" name="student_id" value="<?php echo htmlspecialchars($studentData['student_id'] ?? $_SESSION['user_id_display'] ?? ''); ?>" required>
+                        <input type="text" name="student_id" value="<?php echo htmlspecialchars($studentData['student_id'] ?? $_SESSION['user_id_display'] ?? ''); ?>" disabled required>
                     </div>
                     
                     <div class="form-group">
                         <label>Year Level <span class="required">*</span></label>
-                        <select name="year_level" required>
+                        <select name="year_level" disabled required>
                             <option value="">Select Year Level</option>
                             <option value="Grade 7" <?php echo ($studentData['year_level'] ?? '') === 'Grade 7' ? 'selected' : ''; ?>>Grade 7</option>
                             <option value="Grade 8" <?php echo ($studentData['year_level'] ?? '') === 'Grade 8' ? 'selected' : ''; ?>>Grade 8</option>
@@ -1239,7 +1242,7 @@ function hasValidCoverImage($coverImage) {
                     
                     <div class="form-group">
                         <label>Section <span class="required">*</span></label>
-                        <input type="text" name="section" value="<?php echo htmlspecialchars($studentData['section'] ?? ''); ?>" required>
+                        <input type="text" name="section" value="<?php echo htmlspecialchars($studentData['section'] ?? ''); ?>" disabled required>
                     </div>
                     
                     <div class="form-group">
