@@ -2,10 +2,8 @@
 // librarian_dashboard.php - Librarian Dashboard with Modern Design
 session_start();
 
-// Set timezone to Philippines
 date_default_timezone_set('Asia/Manila');
 
-// Check if user is logged in and is a librarian or admin
 if (!isset($_SESSION['user_id']) || ($_SESSION['role'] !== 'librarian' && $_SESSION['role'] !== 'admin')) {
     header('Location: ../homepage.php');
     exit;
@@ -50,7 +48,6 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     return json_decode($response, true);
 }
 
-// Get section
 $section = isset($_GET['section']) ? $_GET['section'] : 'dashboard';
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
@@ -326,7 +323,6 @@ try {
     $message = 'Error loading data: ' . $e->getMessage();
 }
 
-// Filter books
 $filteredBooks = $books;
 if (!empty($searchTerm)) {
     $searchLower = strtolower($searchTerm);
@@ -337,7 +333,6 @@ if (!empty($searchTerm)) {
     });
 }
 
-// Statistics
 $stats = [
     'totalBooks' => count($books),
     'totalBorrowings' => count($borrowings),
@@ -371,20 +366,67 @@ function hasValidCoverImage($coverImage) {
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>Librarian Dashboard - Bestlink College</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        html, body { overflow-x: hidden; width: 100%; }
         body { 
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif; 
             background: #f5f3f0;
             color: #1a1a1a;
         }
 
-        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: #f0edea; }
         ::-webkit-scrollbar-thumb { background: #d4c9c0; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #b8a89c; }
+
+        /* ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== */
+        .top-header {
+            position: fixed;
+            top: 0;
+            left: 240px;
+            right: 0;
+            height: 56px;
+            background: #010107;
+            border-bottom: 1px solid #2a2a2a;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 1100;
+            transition: left 0.25s ease;
+        }
+        .top-header.collapsed { left: 70px; }
+        .header-left-group { display: flex; align-items: center; gap: 14px; min-width: 0; }
+        .hamburger-btn {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 8px;
+            width: 38px; height: 38px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex-shrink: 0;
+        }
+        .hamburger-btn:hover { background: rgba(229, 29, 102, 0.18); border-color: rgba(229, 29, 102, 0.3); }
+        .hamburger-lines { display: flex; flex-direction: column; gap: 4px; width: 18px; }
+        .hamburger-lines span { display: block; height: 2px; width: 100%; background: #e8e0d8; border-radius: 2px; transition: 0.3s; }
+        .header-title-symbol { color: #f0e8e0; font-size: 17px; opacity: 0.85; }
+        .header-nav-symbols { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+        .header-nav-symbols a {
+            display: flex; align-items: center; justify-content: center;
+            width: 38px; height: 38px;
+            border-radius: 8px;
+            color: #8a7a6e;
+            text-decoration: none;
+            font-size: 17px;
+            transition: all 0.2s ease;
+            position: relative;
+        }
+        .header-nav-symbols a:hover { color: #f0e8e0; background: rgba(255,255,255,0.05); }
+        .header-nav-symbols a.active { color: #f0e8e0; background: rgba(229, 29, 102, 0.18); }
 
         .librarian-app { display: flex; min-height: 100vh; }
         .librarian-sidebar {
@@ -394,21 +436,52 @@ function hasValidCoverImage($coverImage) {
             display: flex;
             flex-direction: column;
             position: fixed;
+            top: 0;
+            left: 0;
             height: 100vh;
             overflow-y: auto;
-            z-index: 100;
+            overflow-x: hidden;
+            z-index: 1050;
             border-right: 1px solid #2a2a2a;
+            transition: width 0.25s ease, transform 0.3s ease;
         }
+        .librarian-sidebar.collapsed { width: 70px; }
+        .librarian-sidebar.collapsed .sidebar-header h2,
+        .librarian-sidebar.collapsed .sidebar-header p,
+        .librarian-sidebar.collapsed .sidebar-header small,
+        .librarian-sidebar.collapsed .sidebar-header .subtitle,
+        .librarian-sidebar.collapsed .sidebar-nav a .nav-label { display: none; }
+        .librarian-sidebar.collapsed .sidebar-nav a { justify-content: center; padding: 14px; font-size: 20px; }
+        .librarian-sidebar.collapsed .sidebar-nav a .nav-icon { font-size: 22px; }
+        .librarian-sidebar.collapsed .sidebar-header { padding: 16px 8px; text-align: center; }
+        .librarian-sidebar.collapsed .sidebar-footer { padding: 16px 12px 24px; }
+        .librarian-sidebar.collapsed .logout-btn { padding: 10px 0; font-size: 16px; }
+        .librarian-sidebar.collapsed .logout-btn .logout-text { display: none; }
+        .librarian-sidebar.collapsed .sidebar-logo-wrapper { justify-content: center; }
+        .librarian-sidebar.collapsed .sidebar-header .sidebar-logo {
+            max-width: 40px; width: 40px; margin: 0 auto;
+        }
+
         .sidebar-header { 
             padding: 28px 24px 20px; 
             border-bottom: 1px solid #2a2a2a;
             text-align: left;
+            transition: padding 0.25s ease;
+        }
+        .sidebar-logo-wrapper {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            transition: justify-content 0.25s ease;
         }
         .sidebar-header .sidebar-logo {
             max-width: 72px;
+            width: 72px;
             height: auto;
             display: block;
             margin-bottom: 12px;
+            transition: max-width 0.3s ease, width 0.3s ease, margin 0.3s ease;
         }
         .sidebar-header h2 { 
             margin: 0; 
@@ -449,6 +522,7 @@ function hasValidCoverImage($coverImage) {
             font-weight: 400;
             transition: all 0.2s ease;
             border-left: 3px solid transparent;
+            position: relative;
         }
         .sidebar-nav a:hover { 
             color: #f0e8e0; 
@@ -500,35 +574,15 @@ function hasValidCoverImage($coverImage) {
         .librarian-content { 
             margin-left: 240px; 
             flex: 1; 
-            padding: 32px 40px; 
+            padding: 80px 40px 32px; 
             background: #f5f3f0; 
             min-height: 100vh; 
+            transition: margin-left 0.25s ease;
         }
+        .librarian-content.collapsed { margin-left: 70px; }
 
-        .mobile-menu-toggle {
-            display: none;
-            position: fixed;
-            top: 16px;
-            left: 16px;
-            z-index: 2000;
-            background: #1a1a1a;
-            color: #e8e0d8;
-            border: 1px solid #2a2a2a;
-            border-radius: 8px;
-            padding: 10px 12px;
-            cursor: pointer;
-            min-height: 44px;
-            min-width: 44px;
-        }
-        .hamburger-icon { display: flex; flex-direction: column; gap: 4px; width: 22px; }
-        .hamburger-icon span { display: block; height: 2px; width: 100%; background: #e8e0d8; border-radius: 2px; transition: 0.3s; }
-        .mobile-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 999;
-        }
+        .mobile-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1040; }
+        .mobile-overlay.active { display: block; }
 
         .dashboard-content { padding: 0; }
         .dashboard-header {
@@ -802,8 +856,9 @@ function hasValidCoverImage($coverImage) {
             overflow: hidden;
             border: 1px solid #e8e0d8;
             overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
         }
-        .data-table { width: 100%; border-collapse: collapse; }
+        .data-table { width: 100%; border-collapse: collapse; min-width: 640px; }
         .data-table th {
             background: #f5f3f0;
             padding: 12px 16px;
@@ -813,6 +868,7 @@ function hasValidCoverImage($coverImage) {
             font-size: 12px;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            white-space: nowrap;
         }
         .data-table td { 
             padding: 12px 16px; 
@@ -854,6 +910,7 @@ function hasValidCoverImage($coverImage) {
             font-size: 12px;
             display: inline-block;
             font-weight: 500;
+            white-space: nowrap;
         }
         .status-borrowed { background: #e8e4e0; color: #4a3a2e; }
         .status-returned { background: #e8ddd8; color: #3a2a2a; }
@@ -878,6 +935,7 @@ function hasValidCoverImage($coverImage) {
             justify-content: center;
             align-items: center;
             backdrop-filter: blur(4px);
+            padding: 12px;
         }
         .modal-overlay.active { display: flex; }
         .modal {
@@ -885,7 +943,7 @@ function hasValidCoverImage($coverImage) {
             padding: 32px 36px;
             border-radius: 16px;
             max-width: 600px;
-            width: 90%;
+            width: 100%;
             max-height: 90vh;
             overflow-y: auto;
             box-shadow: 0 20px 60px rgba(0,0,0,0.15);
@@ -931,6 +989,7 @@ function hasValidCoverImage($coverImage) {
             gap: 10px; 
             margin-top: 24px; 
             justify-content: flex-end; 
+            flex-wrap: wrap;
         }
         .btn-cancel { 
             padding: 10px 24px; 
@@ -1019,64 +1078,180 @@ function hasValidCoverImage($coverImage) {
             font-weight: 400;
         }
 
+        /* ============================================
+           RESPONSIVE BREAKPOINTS
+           ============================================ */
         @media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
-        @media (max-width: 768px) {
-            .librarian-sidebar { width: 70px; }
-            .sidebar-header h2, .sidebar-header p, .sidebar-header small, 
-            .sidebar-header .subtitle, .sidebar-nav a .nav-label { display: none; }
-            .sidebar-nav a { justify-content: center; padding: 14px; font-size: 20px; }
-            .sidebar-nav a .nav-icon { font-size: 22px; }
-            .librarian-content { margin-left: 70px; padding: 20px 24px; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
+
+        @media (max-width: 992px) {
+            .librarian-content { padding: 80px 24px 24px; }
             .quick-actions { grid-template-columns: 1fr 1fr; }
-            .cover-cell { width: 45px; min-width: 45px; }
-            .book-cover-small { width: 40px; height: 52px; }
-            .cover-placeholder-small { width: 40px; height: 52px; font-size: 18px; }
-            .dashboard-header { flex-direction: column; align-items: flex-start; }
-            .header-time { width: 100%; text-align: left; }
         }
-        @media (max-width: 480px) {
-            .mobile-menu-toggle { display: flex !important; align-items: center; justify-content: center; }
+
+        /* =========================================
+           MOBILE / TABLET: Sidebar slides in below header
+           ========================================= */
+        @media (max-width: 900px) {
+            .top-header { left: 0 !important; right: 0 !important; padding: 0 12px; height: 56px; z-index: 1100; }
+            .top-header.collapsed { left: 0 !important; }
+            .header-title-symbol { display: none; }
+
             .librarian-sidebar {
-                position: fixed !important;
-                top: 0 !important; left: 0 !important;
+                top: 56px !important;
+                left: 0;
                 width: 280px !important;
-                height: 100vh !important;
-                z-index: 1000 !important;
-                transform: translateX(-100%) !important;
-                transition: transform 0.3s ease !important;
-                box-shadow: 2px 0 30px rgba(0,0,0,0.2) !important;
-                padding-top: 60px !important;
+                height: calc(100vh - 56px) !important;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+                box-shadow: 6px 0 24px rgba(0,0,0,0.35);
+                z-index: 1050;
+                border-right: 1px solid #2a2a2a;
             }
-            .librarian-sidebar.mobile-open { transform: translateX(0) !important; }
-            .mobile-overlay { display: block !important; }
-            .librarian-content { margin-left: 0 !important; padding: 70px 12px 12px !important; }
-            .sidebar-header h2, .sidebar-header p, .sidebar-header small, 
-            .sidebar-header .subtitle, .sidebar-nav a .nav-label { display: block !important; }
-            .sidebar-nav a { justify-content: flex-start; padding: 12px 20px; font-size: 14px; }
-            .sidebar-nav a .nav-icon { font-size: 18px; }
-            .stats-grid { grid-template-columns: 1fr 1fr; }
+            .librarian-sidebar.mobile-open { transform: translateX(0); }
+            .librarian-sidebar.collapsed { width: 280px !important; }
+            .librarian-sidebar.collapsed .sidebar-header h2,
+            .librarian-sidebar.collapsed .sidebar-header p,
+            .librarian-sidebar.collapsed .sidebar-header small,
+            .librarian-sidebar.collapsed .sidebar-header .subtitle,
+            .librarian-sidebar.collapsed .sidebar-nav a .nav-label { display: block !important; }
+            .librarian-sidebar.collapsed .sidebar-nav a { justify-content: flex-start; padding: 12px 24px; font-size: 14px; }
+            .librarian-sidebar.collapsed .sidebar-nav a .nav-icon { font-size: 18px; }
+            .librarian-sidebar.collapsed .sidebar-header { padding: 20px 24px 16px; text-align: left; }
+            .librarian-sidebar.collapsed .sidebar-logo-wrapper { justify-content: flex-start; }
+            .librarian-sidebar.collapsed .sidebar-header .sidebar-logo { max-width: 56px; width: 56px; margin: 0 0 10px; }
+            .librarian-sidebar.collapsed .sidebar-footer { padding: 16px 24px 24px; }
+            .librarian-sidebar.collapsed .logout-btn .logout-text { display: inline; }
+
+            .librarian-sidebar .sidebar-header { padding: 20px 24px 16px; }
+            .librarian-sidebar .sidebar-header .sidebar-logo { max-width: 56px; width: 56px; margin-bottom: 10px; }
+
+            .librarian-content { margin-left: 0 !important; padding: 74px 16px 24px; }
+            .librarian-content.collapsed { margin-left: 0 !important; }
+
+            .mobile-overlay { z-index: 1040; }
+
+            .dashboard-header { flex-direction: column; align-items: flex-start; padding: 20px; gap: 12px; }
+            .header-time { text-align: left; width: 100%; }
+        }
+
+        @media (max-width: 768px) {
+            .top-header { padding: 0 10px; height: 54px; }
+            .header-nav-symbols a { width: 34px; height: 34px; font-size: 15px; }
+            .hamburger-btn { width: 36px; height: 36px; }
+
+            .librarian-sidebar { top: 54px !important; height: calc(100vh - 54px) !important; }
+            .librarian-content { padding: 70px 14px 24px; }
+
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
             .stat-number { font-size: 20px; }
-            .cover-cell { width: 35px; min-width: 35px; }
-            .book-cover-small { width: 28px; height: 36px; }
-            .cover-placeholder-small { width: 28px; height: 36px; font-size: 12px; }
-            .section-header { flex-direction: column; align-items: flex-start; gap: 10px; }
-            .dashboard-header { padding: 20px; }
+
             .dashboard-header h1 { font-size: 18px; }
-            .quick-actions { grid-template-columns: 1fr 1fr; }
-            .modal { padding: 24px 20px; }
+            .header-time .time { font-size: 17px; }
+
+            .quick-actions { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .section-header { flex-direction: column; align-items: flex-start; }
+            .section-header h1 { font-size: 18px; }
+
+            .modal { padding: 24px 20px; border-radius: 14px; }
+            .modal h3 { font-size: 17px; }
+            .modal .modal-actions { flex-direction: column-reverse; }
+            .modal .modal-actions button { width: 100%; }
+
+            .data-table th, .data-table td { padding: 10px 12px; font-size: 13px; }
+            .data-table { min-width: 560px; }
+        }
+
+        @media (max-width: 480px) {
+            .top-header { padding: 0 8px; height: 52px; }
+            .header-left-group { gap: 8px; }
+            .hamburger-btn { width: 34px; height: 34px; border-radius: 7px; }
+            .hamburger-lines { width: 16px; gap: 3px; }
+            .header-nav-symbols { gap: 1px; }
+            .header-nav-symbols a { width: 32px; height: 32px; font-size: 14px; border-radius: 7px; }
+
+            .librarian-sidebar { top: 52px !important; height: calc(100vh - 52px) !important; width: 270px !important; }
+            .librarian-content { padding: 66px 10px 20px; }
+
+            .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+            .stat-card { padding: 12px 8px; }
+            .stat-number { font-size: 18px; }
+            .stat-label { font-size: 11px; }
+
+            .dashboard-header { padding: 16px; border-radius: 12px; }
+            .dashboard-header h1 { font-size: 16px; }
+            .header-date { font-size: 12px; }
+
+            .quick-actions { grid-template-columns: 1fr 1fr; gap: 8px; }
+            .quick-action-card { padding: 14px 8px; }
+            .action-icon { font-size: 19px; }
+            .action-label { font-size: 11px; }
+
+            .section-header h1 { font-size: 16px; }
+            .btn-add, .btn-save, .btn-export { padding: 9px 14px; font-size: 12px; }
+
+            .message { padding: 11px 14px; font-size: 12px; }
+
+            .modal { padding: 18px 14px; border-radius: 12px; }
+            .modal h3 { font-size: 15px; }
+            .modal .form-group label { font-size: 13px; }
+            .modal .form-group input,
+            .modal .form-group select,
+            .modal .form-group textarea { padding: 9px 12px; font-size: 13px; }
+
+            .cover-preview { max-width: 120px; max-height: 160px; }
+
+            .data-table th, .data-table td { padding: 9px 10px; font-size: 12px; }
+            .data-table { min-width: 520px; }
+            .book-cover-small { width: 42px; height: 56px; }
+            .cover-placeholder-small { width: 42px; height: 56px; font-size: 18px; }
+            .cover-cell { width: 50px; min-width: 50px; }
+
+            .btn-edit, .btn-delete, .btn-return, .btn-pay { padding: 5px 10px; font-size: 11px; }
+        }
+
+        @media (max-width: 360px) {
+            .header-nav-symbols a { width: 30px; height: 30px; font-size: 13px; }
+            .hamburger-btn { width: 32px; height: 32px; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .quick-actions { grid-template-columns: 1fr; }
+        }
+
+        @media (hover: none) {
+            .stat-card:hover, .quick-action-card:hover { transform: none; }
         }
     </style>
 </head>
 <body>
-    <div class="librarian-app">
-        <button class="mobile-menu-toggle" onclick="toggleMobileMenu()">
-            <span class="hamburger-icon"><span></span><span></span><span></span></span>
-        </button>
+    <!-- ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== -->
+    <header class="top-header" id="topHeader">
+        <div class="header-left-group">
+            <button class="hamburger-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle Sidebar">
+                <span class="hamburger-lines"><span></span><span></span><span></span></span>
+            </button>
+            <span class="header-title-symbol">🖥</span>
+        </div>
+        <nav class="header-nav-symbols">
+            <a href="librarian_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Dashboard">
+                <span>◆</span>
+            </a>
+            <a href="librarian_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>" title="Books">
+                <span>▣</span>
+            </a>
+            <a href="librarian_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>" title="Borrowings">
+                <span>◈</span>
+            </a>
+            <a href="librarian_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines">
+                <span>◉</span>
+            </a>
+        </nav>
+    </header>
 
+    <div class="librarian-app">
         <div class="librarian-sidebar" id="sidebar">
             <div class="sidebar-header">
-                <img src="../img/agustinnb.png" alt="BCP Logo" class="sidebar-logo" onerror="this.style.display='none'">
+                <div class="sidebar-logo-wrapper">
+                    <img src="../img/agustinnb.png" alt="BCP Logo" class="sidebar-logo" onerror="this.style.display='none'">
+                </div>
                 <h2>ST. AGNES ACADEMY</h2>
                 <div class="subtitle">Caloocan Inc.</div>
                 <p><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Librarian'); ?></p>
@@ -1101,13 +1276,15 @@ function hasValidCoverImage($coverImage) {
                 </a>
             </nav>
             <div class="sidebar-footer">
-                <a href="../admin_logout.php" class="logout-btn">Logout</a>
+                <a href="../admin_logout.php" class="logout-btn">
+                    <span class="logout-text">Logout</span>
+                </a>
             </div>
         </div>
 
         <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileMenu()"></div>
 
-        <div class="librarian-content">
+        <div class="librarian-content" id="librarianContent">
             <?php if ($message): ?>
                 <div class="message info"><?php echo htmlspecialchars($message); ?></div>
             <?php endif; ?>
@@ -1172,7 +1349,7 @@ function hasValidCoverImage($coverImage) {
                     </button>
                 </div>
 
-                <div style="background:#ffffff;border-radius:16px;padding:20px 24px;border:1px solid #e8e0d8;">
+                <div style="background:#ffffff;border-radius:16px;padding:20px 24px;border:1px solid #e8e0d8;overflow-x:auto;">
                     <h3 style="margin:0 0 16px 0;color:#1a1a1a;font-weight:600;">Recent Borrowings</h3>
                     <?php if (!empty($borrowings)): ?>
                         <table class="data-table">
@@ -1536,10 +1713,10 @@ function hasValidCoverImage($coverImage) {
                         <option value="">Select Student</option>
                         <?php foreach ($students as $s): 
                             $studentName = $s['users']['full_name'] ?? 'Unknown';
-                            $studentId = $s['student_id'] ?? 'N/A';
+                            $studentIdVal = $s['student_id'] ?? 'N/A';
                         ?>
                             <option value="<?php echo $s['id']; ?>">
-                                <?php echo htmlspecialchars($studentName . ' (' . $studentId . ')'); ?>
+                                <?php echo htmlspecialchars($studentName . ' (' . $studentIdVal . ')'); ?>
                             </option>
                         <?php endforeach; ?>
                     </select>
@@ -1571,17 +1748,66 @@ function hasValidCoverImage($coverImage) {
     </div>
 
     <script>
-        // ===== MOBILE MENU =====
+        /* ===== SIDEBAR TOGGLE (HAMBURGER) ===== */
+        function toggleSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            const content = document.getElementById('librarianContent');
+            const topHeader = document.getElementById('topHeader');
+            const overlay = document.getElementById('mobileOverlay');
+            
+            if (window.innerWidth <= 900) {
+                sidebar.classList.toggle('mobile-open');
+                if (sidebar.classList.contains('mobile-open')) {
+                    overlay.classList.add('active');
+                    document.body.style.overflow = 'hidden';
+                } else {
+                    overlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+            } else {
+                sidebar.classList.toggle('collapsed');
+                content.classList.toggle('collapsed');
+                topHeader.classList.toggle('collapsed');
+                localStorage.setItem('librarianSidebarCollapsed', sidebar.classList.contains('collapsed') ? '1' : '0');
+            }
+        }
+
         function toggleMobileMenu() {
             const sidebar = document.getElementById('sidebar');
             const overlay = document.getElementById('mobileOverlay');
-            sidebar.classList.toggle('mobile-open');
-            overlay.style.display = sidebar.classList.contains('mobile-open') ? 'block' : 'none';
+            sidebar.classList.remove('mobile-open');
+            overlay.classList.remove('active');
+            document.body.style.overflow = '';
         }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            if (window.innerWidth > 900 && localStorage.getItem('librarianSidebarCollapsed') === '1') {
+                document.getElementById('sidebar').classList.add('collapsed');
+                document.getElementById('librarianContent').classList.add('collapsed');
+                document.getElementById('topHeader').classList.add('collapsed');
+            }
+        });
+
+        let resizeTimer;
+        window.addEventListener('resize', function() {
+            clearTimeout(resizeTimer);
+            resizeTimer = setTimeout(function() {
+                const sidebar = document.getElementById('sidebar');
+                const overlay = document.getElementById('mobileOverlay');
+                if (window.innerWidth > 900) {
+                    sidebar.classList.remove('mobile-open');
+                    overlay.classList.remove('active');
+                    document.body.style.overflow = '';
+                } else {
+                    sidebar.classList.remove('collapsed');
+                    document.getElementById('librarianContent').classList.remove('collapsed');
+                    document.getElementById('topHeader').classList.remove('collapsed');
+                }
+            }, 150);
+        });
 
         // ===== SEARCH =====
         let searchTimeout;
-
         function searchBooks(query) {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(function() {
@@ -1598,10 +1824,12 @@ function hasValidCoverImage($coverImage) {
         // ===== MODALS =====
         function openModal(id) {
             document.getElementById(id).classList.add('active');
+            document.body.style.overflow = 'hidden';
         }
 
         function closeModal(id) {
             document.getElementById(id).classList.remove('active');
+            document.body.style.overflow = '';
         }
 
         function openAddBookModal() {
@@ -1693,9 +1921,6 @@ function hasValidCoverImage($coverImage) {
             document.getElementById('editCoverImageInput').value = '';
         }
 
-        // ============================================
-        // OPEN EDIT BOOK MODAL
-        // ============================================
         function openEditBookModal(id, title, author, isbn, publisher, year, category, quantity, available, location, description, coverImage) {
             document.getElementById('edit_book_id').value = id;
             document.getElementById('edit_title').value = title;
@@ -1722,11 +1947,11 @@ function hasValidCoverImage($coverImage) {
             openModal('editBookModal');
         }
 
-        // Close modal on overlay click
         document.querySelectorAll('.modal-overlay').forEach(function(modal) {
             modal.addEventListener('click', function(e) {
                 if (e.target === this) {
                     this.classList.remove('active');
+                    document.body.style.overflow = '';
                 }
             });
         });
@@ -1734,7 +1959,6 @@ function hasValidCoverImage($coverImage) {
         // ===== CLOCK =====
         function updateClock() {
             const now = new Date();
-            const options = { timeZone: 'Asia/Manila', hour12: true };
             const timeString = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
             const dateString = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
             
