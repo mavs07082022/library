@@ -48,6 +48,25 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     return json_decode($response, true);
 }
 
+/**
+ * Determine if a borrowing is overdue based on current date (Asia/Manila).
+ */
+function computeBorrowingStatus($borrowing) {
+    $status = $borrowing['status'] ?? 'Borrowed';
+    if ($status === 'Returned') {
+        return 'Returned';
+    }
+    $dueDate = $borrowing['due_date'] ?? null;
+    if ($dueDate) {
+        $dueTimestamp = strtotime($dueDate);
+        $today = strtotime(date('Y-m-d'));
+        if ($dueTimestamp !== false && $dueTimestamp < $today) {
+            return 'Overdue';
+        }
+    }
+    return $status;
+}
+
 $section = isset($_GET['section']) ? $_GET['section'] : 'dashboard';
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
@@ -58,7 +77,6 @@ $userId = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
 // HANDLE BOOK ACTIONS
 // ============================================
 
-// Add Book
 if ($section === 'books' && $action === 'add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = $_POST['title'] ?? '';
     $author = $_POST['author'] ?? '';
@@ -103,7 +121,6 @@ if ($section === 'books' && $action === 'add' && $_SERVER['REQUEST_METHOD'] === 
     exit;
 }
 
-// Edit Book
 if ($section === 'books' && $action === 'edit' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $bookId = $_POST['book_id'] ?? '';
     $title = $_POST['title'] ?? '';
@@ -149,7 +166,6 @@ if ($section === 'books' && $action === 'edit' && $_SERVER['REQUEST_METHOD'] ===
     exit;
 }
 
-// Delete Book
 if ($section === 'books' && isset($_GET['delete'])) {
     $bookId = $_GET['delete'];
     try {
@@ -170,7 +186,7 @@ if ($section === 'books' && isset($_GET['delete'])) {
 if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
     $borrowingId = $_GET['id'];
     try {
-        $borrowing = supabaseRequest('borrowings?select=book_id,status&id=eq.' . $borrowingId);
+        $borrowing = supabaseRequest('borrowings?select=book_id,status,due_date,user_id&id=eq.' . $borrowingId);
         if (empty($borrowing)) {
             header('Location: librarian_dashboard.php?section=borrowings&msg=Borrowing not found');
             exit;
@@ -179,6 +195,17 @@ if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
         if (($borrowing[0]['status'] ?? '') === 'Returned') {
             header('Location: librarian_dashboard.php?section=borrowings&msg=Book already returned');
             exit;
+        }
+        
+        // Compute if this was overdue at time of return
+        $wasOverdue = false;
+        $dueDate = $borrowing[0]['due_date'] ?? null;
+        if ($dueDate) {
+            $dueTimestamp = strtotime($dueDate);
+            $today = strtotime(date('Y-m-d'));
+            if ($dueTimestamp !== false && $dueTimestamp < $today) {
+                $wasOverdue = true;
+            }
         }
         
         supabaseRequest('borrowings?id=eq.' . $borrowingId, 'PATCH', [
@@ -193,7 +220,11 @@ if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
             ]);
         }
         
-        header('Location: librarian_dashboard.php?section=borrowings&msg=Book returned successfully');
+        $msg = 'Book returned successfully';
+        if ($wasOverdue) {
+            $msg = 'Book returned successfully. Note: This was an overdue return — a fine may need to be applied.';
+        }
+        header('Location: librarian_dashboard.php?section=borrowings&msg=' . urlencode($msg));
         exit;
     } catch (Exception $e) {
         header('Location: librarian_dashboard.php?section=borrowings&msg=Error returning book');
@@ -205,7 +236,6 @@ if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
 // HANDLE FINE ACTIONS
 // ============================================
 
-// Pay Fine
 if ($section === 'fines' && $action === 'pay' && isset($_GET['id'])) {
     $fineId = $_GET['id'];
     try {
@@ -221,7 +251,6 @@ if ($section === 'fines' && $action === 'pay' && isset($_GET['id'])) {
     }
 }
 
-// Add Fine
 if ($section === 'fines' && $action === 'add_fine' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $student_id = $_POST['student_id'] ?? '';
     $amount = floatval($_POST['amount'] ?? 0);
@@ -302,6 +331,7 @@ try {
             ? $catMap[$book['category_id']] 
             : 'Uncategorized';
     }
+    unset($book);
     
     foreach ($borrowings as &$b) {
         if (isset($b['user_id'])) {
@@ -317,7 +347,10 @@ try {
             $b['student_name'] = 'Unknown';
             $b['student_id'] = 'N/A';
         }
+        // Auto-compute overdue status
+        $b['display_status'] = computeBorrowingStatus($b);
     }
+    unset($b);
 
 } catch (Exception $e) {
     $message = 'Error loading data: ' . $e->getMessage();
@@ -340,7 +373,7 @@ $stats = [
         return ($b['status'] ?? '') !== 'Returned';
     })),
     'overdueBorrowings' => count(array_filter($borrowings, function($b) {
-        return ($b['status'] ?? '') === 'Overdue';
+        return ($b['display_status'] ?? '') === 'Overdue';
     })),
     'totalFines' => array_sum(array_column($fines, 'amount')),
     'pendingFines' => count(array_filter($fines, function($f) {
@@ -387,7 +420,6 @@ function hasValidCoverImage($coverImage) {
         ::-webkit-scrollbar-thumb { background: #d4c9c0; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #b8a89c; }
 
-        /* ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== */
         .top-header {
             position: fixed;
             top: 0;
@@ -1020,6 +1052,49 @@ function hasValidCoverImage($coverImage) {
         }
         .btn-confirm:hover { background: #2a2a2a; }
 
+        .return-confirm-icon {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            background: #f0e8ee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            font-size: 30px;
+            color: #b40f7d;
+        }
+        .return-confirm-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a1a;
+            margin-bottom: 8px;
+        }
+        .return-confirm-sub {
+            text-align: center;
+            font-size: 14px;
+            color: #6a5a4e;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .return-book-preview {
+            background: #faf8f6;
+            border-radius: 10px;
+            padding: 14px 18px;
+            border: 1px solid #e8e0d8;
+            margin-bottom: 20px;
+        }
+        .return-book-preview .rb-title {
+            font-weight: 600;
+            color: #1a1a1a;
+            font-size: 15px;
+        }
+        .return-book-preview .rb-meta {
+            font-size: 13px;
+            color: #6a5a4e;
+            margin-top: 2px;
+        }
+
         .cover-upload-container {
             border: 2px dashed #e0d8d0;
             border-radius: 8px;
@@ -1082,10 +1157,11 @@ function hasValidCoverImage($coverImage) {
             white-space: nowrap; 
             font-weight: 400;
         }
+        .count-badge.overdue-warning {
+            color: #8a3a2a;
+            font-weight: 600;
+        }
 
-        /* ============================================
-           RESPONSIVE BREAKPOINTS
-           ============================================ */
         @media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(3, 1fr); } }
 
         @media (max-width: 992px) {
@@ -1093,9 +1169,6 @@ function hasValidCoverImage($coverImage) {
             .quick-actions { grid-template-columns: 1fr 1fr; }
         }
 
-        /* =========================================
-           MOBILE / TABLET: Sidebar slides in below header
-           ========================================= */
         @media (max-width: 900px) {
             .top-header { left: 0 !important; right: 0 !important; padding: 0 12px; height: 56px; z-index: 1100; }
             .top-header.collapsed { left: 0 !important; }
@@ -1227,7 +1300,6 @@ function hasValidCoverImage($coverImage) {
     </style>
 </head>
 <body>
-    <!-- ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== -->
     <header class="top-header" id="topHeader">
         <div class="header-left-group">
             <button class="hamburger-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle Sidebar">
@@ -1295,7 +1367,6 @@ function hasValidCoverImage($coverImage) {
             <?php endif; ?>
 
             <?php if ($section === 'dashboard'): ?>
-            <!-- ===== DASHBOARD ===== -->
             <div class="dashboard-content">
                 <div class="dashboard-header">
                     <div class="header-left">
@@ -1322,7 +1393,7 @@ function hasValidCoverImage($coverImage) {
                         <div class="stat-label">Active Borrowings</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number"><?php echo $stats['overdueBorrowings']; ?></div>
+                        <div class="stat-number" style="<?php echo $stats['overdueBorrowings'] > 0 ? 'color:#8a3a2a;' : ''; ?>"><?php echo $stats['overdueBorrowings']; ?></div>
                         <div class="stat-label">Overdue</div>
                     </div>
                     <div class="stat-card">
@@ -1368,7 +1439,7 @@ function hasValidCoverImage($coverImage) {
                                         <td><?php echo htmlspecialchars($b['student_name'] ?? 'Unknown'); ?></td>
                                         <td><?php echo date('M d, Y', strtotime($b['borrow_date'] ?? 'now')); ?></td>
                                         <td><?php echo date('M d, Y', strtotime($b['due_date'] ?? 'now')); ?></td>
-                                        <td><span class="status-badge status-<?php echo strtolower($b['status'] ?? 'borrowed'); ?>"><?php echo $b['status'] ?? 'Borrowed'; ?></span></td>
+                                        <td><span class="status-badge status-<?php echo strtolower($b['display_status'] ?? 'borrowed'); ?>"><?php echo $b['display_status'] ?? 'Borrowed'; ?></span></td>
                                     </tr>
                                 <?php endforeach; ?>
                             </tbody>
@@ -1380,7 +1451,6 @@ function hasValidCoverImage($coverImage) {
             </div>
 
             <?php elseif ($section === 'books'): ?>
-            <!-- ===== BOOKS MANAGEMENT ===== -->
             <div class="book-management">
                 <div class="section-header">
                     <h1>Books Management (<?php echo count($books); ?> books)</h1>
@@ -1443,7 +1513,6 @@ function hasValidCoverImage($coverImage) {
                 </div>
             </div>
 
-            <!-- Add Book Modal -->
             <div class="modal-overlay" id="addBookModal">
                 <div class="modal">
                     <h3>Add New Book</h3>
@@ -1517,7 +1586,6 @@ function hasValidCoverImage($coverImage) {
                 </div>
             </div>
 
-            <!-- Edit Book Modal -->
             <div class="modal-overlay" id="editBookModal">
                 <div class="modal">
                     <h3>Edit Book</h3>
@@ -1593,11 +1661,15 @@ function hasValidCoverImage($coverImage) {
             </div>
 
             <?php elseif ($section === 'borrowings'): ?>
-            <!-- ===== BORROWINGS MANAGEMENT ===== -->
             <div class="borrowing-management">
                 <div class="section-header">
                     <h1>Borrowings Management</h1>
-                    <span class="count-badge">Total: <?php echo count($borrowings); ?></span>
+                    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+                        <span class="count-badge">Total: <?php echo count($borrowings); ?></span>
+                        <?php if ($stats['overdueBorrowings'] > 0): ?>
+                            <span class="count-badge overdue-warning">⚠ <?php echo $stats['overdueBorrowings']; ?> Overdue</span>
+                        <?php endif; ?>
+                    </div>
                 </div>
 
                 <div class="table-container">
@@ -1621,11 +1693,11 @@ function hasValidCoverImage($coverImage) {
                                         <td><?php echo htmlspecialchars($b['student_name'] ?? 'Unknown'); ?></td>
                                         <td><?php echo htmlspecialchars($b['student_id'] ?? 'N/A'); ?></td>
                                         <td><?php echo date('M d, Y', strtotime($b['borrow_date'] ?? 'now')); ?></td>
-                                        <td><?php echo date('M d, Y', strtotime($b['due_date'] ?? 'now')); ?></td>
-                                        <td><span class="status-badge status-<?php echo strtolower($b['status'] ?? 'borrowed'); ?>"><?php echo $b['status'] ?? 'Borrowed'; ?></span></td>
+                                        <td style="<?php echo ($b['display_status'] ?? '') === 'Overdue' ? 'color:#8a3a2a;font-weight:600;' : ''; ?>"><?php echo date('M d, Y', strtotime($b['due_date'] ?? 'now')); ?></td>
+                                        <td><span class="status-badge status-<?php echo strtolower($b['display_status'] ?? 'borrowed'); ?>"><?php echo $b['display_status'] ?? 'Borrowed'; ?></span></td>
                                         <td>
                                             <?php if (($b['status'] ?? '') !== 'Returned'): ?>
-                                                <a href="librarian_dashboard.php?section=borrowings&action=return&id=<?php echo $b['id']; ?>" class="btn-return" onclick="return confirm('Return this book?')">Return</a>
+                                                <a href="javascript:void(0);" class="btn-return" onclick="openReturnConfirm('<?php echo $b['id']; ?>', '<?php echo addslashes($b['books']['title'] ?? 'Unknown'); ?>', '<?php echo addslashes($b['student_name'] ?? 'Unknown'); ?>', '<?php echo addslashes($b['student_id'] ?? 'N/A'); ?>', '<?php echo $b['due_date'] ?? ''; ?>')">Return</a>
                                             <?php else: ?>
                                                 <span style="color:#b0a8a0;font-size:12px;">Returned</span>
                                             <?php endif; ?>
@@ -1640,8 +1712,29 @@ function hasValidCoverImage($coverImage) {
                 </div>
             </div>
 
+            <!-- Return Confirmation Modal -->
+            <div class="modal-overlay" id="returnConfirmModal">
+                <div class="modal" style="max-width:460px;">
+                    <div class="return-confirm-icon">📚</div>
+                    <div class="return-confirm-title">Return this book?</div>
+                    <div class="return-confirm-sub">Please confirm that the student is returning the physical book. This action will mark the borrowing as returned.</div>
+                    <div class="return-book-preview">
+                        <div class="rb-title" id="returnBookTitle">Book Title</div>
+                        <div class="rb-meta" id="returnBookMeta">by Student • Due: —</div>
+                    </div>
+                    <form method="GET" action="librarian_dashboard.php" id="returnConfirmForm">
+                        <input type="hidden" name="section" value="borrowings">
+                        <input type="hidden" name="action" value="return">
+                        <input type="hidden" name="id" id="returnBorrowingId" value="">
+                        <div class="modal-actions">
+                            <button type="button" class="btn-cancel" onclick="closeModal('returnConfirmModal')">Cancel</button>
+                            <button type="submit" class="btn-confirm">Yes, Return Book</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
             <?php elseif ($section === 'fines'): ?>
-            <!-- ===== FINES MANAGEMENT ===== -->
             <div class="fine-management">
                 <div class="section-header">
                     <h1>Fines Management</h1>
@@ -1753,7 +1846,6 @@ function hasValidCoverImage($coverImage) {
     </div>
 
     <script>
-        /* ===== SIDEBAR TOGGLE (HAMBURGER) ===== */
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const content = document.getElementById('librarianContent');
@@ -1811,7 +1903,6 @@ function hasValidCoverImage($coverImage) {
             }, 150);
         });
 
-        // ===== SEARCH =====
         let searchTimeout;
         function searchBooks(query) {
             clearTimeout(searchTimeout);
@@ -1826,7 +1917,6 @@ function hasValidCoverImage($coverImage) {
             }, 400);
         }
 
-        // ===== MODALS =====
         function openModal(id) {
             document.getElementById(id).classList.add('active');
             document.body.style.overflow = 'hidden';
@@ -1837,14 +1927,25 @@ function hasValidCoverImage($coverImage) {
             document.body.style.overflow = '';
         }
 
+        function openReturnConfirm(borrowingId, bookTitle, studentName, studentId, dueDate) {
+            document.getElementById('returnBorrowingId').value = borrowingId;
+            document.getElementById('returnBookTitle').textContent = bookTitle || 'Book';
+            let dueText = 'Due: —';
+            if (dueDate) {
+                const d = new Date(dueDate);
+                if (!isNaN(d.getTime())) {
+                    dueText = 'Due: ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                }
+            }
+            document.getElementById('returnBookMeta').textContent = 'by ' + (studentName || 'Student') + ' (' + (studentId || 'N/A') + ') • ' + dueText;
+            openModal('returnConfirmModal');
+        }
+
         function openAddBookModal() {
             openModal('addBookModal');
             removeCoverImage();
         }
 
-        // ============================================
-        // COVER IMAGE UPLOAD FOR ADD BOOK
-        // ============================================
         let currentCoverImageData = '';
 
         function handleCoverImageUpload(event) {
@@ -1884,9 +1985,6 @@ function hasValidCoverImage($coverImage) {
             document.getElementById('coverImageInput').value = '';
         }
 
-        // ============================================
-        // COVER IMAGE UPLOAD FOR EDIT BOOK
-        // ============================================
         let editCoverImageData = '';
 
         function handleEditCoverImageUpload(event) {
@@ -1961,7 +2059,6 @@ function hasValidCoverImage($coverImage) {
             });
         });
 
-        // ===== CLOCK =====
         function updateClock() {
             const now = new Date();
             const timeString = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
