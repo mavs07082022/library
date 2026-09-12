@@ -9,8 +9,9 @@ if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'admin') {
     exit;
 }
 
-if (file_exists('fpdf.php')) {
-    require_once('fpdf.php');
+$fpdfPath = __DIR__ . '/fpdf.php';
+if (file_exists($fpdfPath)) {
+    require_once($fpdfPath);
 }
 
 define('SUPABASE_URL', 'https://olzkpwzebcnmbqhbcyyz.supabase.co');
@@ -206,7 +207,6 @@ if ($section === 'requests' && isset($_GET['action'])) {
 }
 
 // ===== BOOK EXPORT =====
-// ===== BOOK EXPORT =====
 if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
     try {
         $books = supabaseRequest('books?select=*');
@@ -242,10 +242,18 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
             error_reporting(0);
             ini_set('display_errors', 0);
             
+            // Ensure FPDF is loaded using absolute path
+            if (!class_exists('FPDF')) {
+                $fpdfTry = __DIR__ . '/fpdf.php';
+                if (file_exists($fpdfTry)) {
+                    require_once($fpdfTry);
+                }
+            }
+            
             if (!class_exists('FPDF')) {
                 header('Content-Type: text/plain; charset=utf-8');
                 echo "PDF export failed: FPDF library not loaded.\n";
-                echo "Make sure fpdf.php and the font/ folder are in: " . __DIR__ . "\n";
+                echo "Looked for: " . __DIR__ . "/fpdf.php\n";
                 exit;
             }
             
