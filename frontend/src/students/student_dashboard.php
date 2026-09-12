@@ -268,6 +268,53 @@ if ($section === 'search' && $action === 'borrow' && isset($_GET['book_id'])) {
     exit;
 }
 
+// ===== BORROW FROM MY REQUESTS HANDLING =====
+if ($section === 'requests' && $action === 'borrow' && isset($_GET['book_id'])) {
+    $bookId = $_GET['book_id'];
+    
+    if ($isRestricted) {
+        header('Location: student_dashboard.php?section=requests&msg=Your account is restricted. Please settle your fines and return overdue books first.');
+        exit;
+    }
+    
+    try {
+        $approvedRequests = supabaseRequest('book_requests?select=id&user_id=eq.' . $userId . '&book_id=eq.' . $bookId . '&status=eq.Approved&request_type=eq.borrow');
+        if (empty($approvedRequests)) {
+            header('Location: student_dashboard.php?section=requests&msg=No approved request found for this book.');
+            exit;
+        }
+        
+        $bookCheck = supabaseRequest('books?select=available,id,title&id=eq.' . $bookId);
+        if (empty($bookCheck) || ($bookCheck[0]['available'] ?? 0) <= 0) {
+            header('Location: student_dashboard.php?section=requests&msg=Book is currently not available');
+            exit;
+        }
+
+        $existing = supabaseRequest('borrowings?select=id&user_id=eq.' . $userId . '&book_id=eq.' . $bookId . '&status=neq.Returned');
+        if (!empty($existing)) {
+            header('Location: student_dashboard.php?section=requests&msg=You already borrowed this book');
+            exit;
+        }
+
+        $borrowData = [
+            'book_id' => $bookId,
+            'user_id' => $userId,
+            'borrow_date' => date('Y-m-d'),
+            'due_date' => date('Y-m-d', strtotime('+14 days')),
+            'status' => 'Borrowed'
+        ];
+        supabaseRequest('borrowings', 'POST', $borrowData);
+        supabaseRequest('books?id=eq.' . $bookId, 'PATCH', ['available' => ($bookCheck[0]['available'] - 1)]);
+        supabaseRequest('book_requests?id=eq.' . $approvedRequests[0]['id'], 'PATCH', ['status' => 'Fulfilled']);
+
+        header('Location: student_dashboard.php?section=borrowings&msg=Book borrowed successfully!');
+        exit;
+    } catch (Exception $e) {
+        header('Location: student_dashboard.php?section=requests&msg=Error borrowing book: ' . urlencode($e->getMessage()));
+        exit;
+    }
+}
+
 // ===== RESERVE HANDLING =====
 if ($section === 'search' && $action === 'reserve' && isset($_GET['book_id'])) {
     $bookId = $_GET['book_id'];
@@ -370,14 +417,6 @@ function hasValidCoverImage($coverImage) {
     return false;
 }
 
-// ============================================
-// DYNAMIC BASE PATH FOR FIREBASE FILES
-// Computes the path from this file's location to the site root.
-// Example: /library/frontend/src/students/student_dashboard.php
-//          → dirname x4 → /library
-// If deployed at root: /frontend/src/students/student_dashboard.php
-//          → dirname x4 → (empty string, meaning site root)
-// ============================================
 $basePath = dirname(dirname(dirname(dirname($_SERVER['PHP_SELF']))));
 if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = '';
 ?>
@@ -402,7 +441,6 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
         ::-webkit-scrollbar-thumb { background: #d4c9c0; border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: #b8a89c; }
 
-        /* ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== */
         .top-header {
             position: fixed;
             top: 0;
@@ -718,9 +756,6 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
         .restricted-warning .warning-text { color: #6a3a2a; font-size: 14px; margin-top: 4px; }
         .restricted-warning .fine-list { margin-top: 8px; padding-left: 20px; font-size: 13px; color: #6a3a2a; }
 
-        /* ============================================
-           RESPONSIVE BREAKPOINTS
-           ============================================ */
         @media (max-width: 1200px) {
             .stats-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
         }
@@ -861,7 +896,6 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
         }
     </style>
     
-    <!-- Firebase AI Logic - Dynamic path resolution -->
     <script src="<?php echo $basePath; ?>/firebase_config.js"></script>
     <script src="<?php echo $basePath; ?>/ai_functions.js"></script>
     <script>
@@ -1146,11 +1180,11 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
                                         <?php if ($isRestricted): ?>
                                             <button class="btn-borrow" disabled>Restricted</button>
                                         <?php elseif ($canBorrow): ?>
-                                            <button class="btn-borrow" onclick="openBorrowModal('<?php echo $bookId; ?>', '<?php echo htmlspecialchars($title); ?>', '<?php echo htmlspecialchars($author); ?>', <?php echo $available; ?>)">Borrow</button>
+                                            <button class="btn-borrow" onclick="openBorrowModal('<?php echo $bookId; ?>', '<?php echo htmlspecialchars($title, ENT_QUOTES); ?>', '<?php echo htmlspecialchars($author, ENT_QUOTES); ?>', <?php echo $available; ?>)">Borrow</button>
                                         <?php elseif ($hasPendingRequest): ?>
                                             <span class="btn-request" style="background:#d4c9c0;cursor:not-allowed;opacity:0.6;">Request Pending</span>
                                         <?php elseif ($canRequest): ?>
-                                            <button class="btn-request" onclick="openRequestForm('<?php echo $bookId; ?>', '<?php echo htmlspecialchars($title); ?>', '<?php echo htmlspecialchars($author); ?>', 'borrow')">Request</button>
+                                            <button class="btn-request" onclick="openRequestForm('<?php echo $bookId; ?>', '<?php echo htmlspecialchars($title, ENT_QUOTES); ?>', '<?php echo htmlspecialchars($author, ENT_QUOTES); ?>', 'borrow')">Request</button>
                                         <?php else: ?>
                                             <span class="btn-borrow" style="background:#d4c9c0;cursor:not-allowed;color:#8a7a6e;">Unavailable</span>
                                         <?php endif; ?>
@@ -1246,9 +1280,19 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
                     <?php foreach ($studentRequests as $request): 
                         $bookTitle = $request['books']['title'] ?? 'Unknown Book';
                         $bookAuthor = $request['books']['author'] ?? 'Unknown Author';
+                        $bookId = $request['book_id'] ?? '';
                         $status = $request['status'] ?? 'Pending';
                         $requestType = $request['request_type'] ?? 'borrow';
                         $createdAt = $request['created_at'] ?? 'now';
+
+                        $bookAvailable = 0;
+                        foreach ($allBooks as $bk) {
+                            if ($bk['id'] == $bookId) { $bookAvailable = $bk['available'] ?? 0; break; }
+                        }
+                        $canBorrowNow = ($status === 'Approved')
+                                     && ($requestType === 'borrow')
+                                     && ($bookAvailable > 0)
+                                     && !$isRestricted;
                     ?>
                         <div class="request-item">
                             <div class="request-info">
@@ -1257,8 +1301,13 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
                                     by <?php echo htmlspecialchars($bookAuthor); ?> • <?php echo ucfirst($requestType); ?> request • <?php echo date('M d, Y', strtotime($createdAt)); ?>
                                 </div>
                             </div>
-                            <div>
+                            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
                                 <span class="request-status <?php echo strtolower($status); ?>"><?php echo $status; ?></span>
+                                <?php if ($canBorrowNow): ?>
+                                    <button class="btn-borrow" onclick="openBorrowModal('<?php echo $bookId; ?>', '<?php echo htmlspecialchars($bookTitle, ENT_QUOTES); ?>', '<?php echo htmlspecialchars($bookAuthor, ENT_QUOTES); ?>', <?php echo $bookAvailable; ?>)">Borrow Now</button>
+                                <?php elseif ($status === 'Approved' && $bookAvailable <= 0): ?>
+                                    <span style="font-size:12px;color:#8a3a2a;">Book currently unavailable</span>
+                                <?php endif; ?>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -1411,8 +1460,9 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
                 <div id="borrowBookTitle" style="font-weight:600;">Book Title</div>
                 <div id="borrowBookAuthor" style="color:#6a5a4e;font-size:14px;">by Author</div>
             </div>
+            <p style="color:#6a5a4e;font-size:13px;margin-bottom:16px;">You are about to borrow this book. The due date will be 14 days from today.</p>
             <form id="borrowForm" method="GET" action="student_dashboard.php">
-                <input type="hidden" name="section" value="search">
+                <input type="hidden" name="section" id="borrowFormSection" value="search">
                 <input type="hidden" name="action" value="borrow">
                 <input type="hidden" name="book_id" id="borrowBookId">
                 <div class="form-actions">
@@ -1510,6 +1560,15 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
             document.getElementById('borrowBookId').value = bookId;
             document.getElementById('borrowBookTitle').textContent = title;
             document.getElementById('borrowBookAuthor').textContent = 'by ' + author;
+
+            const currentSection = '<?php echo $section; ?>';
+            const formSectionInput = document.getElementById('borrowFormSection');
+            if (currentSection === 'requests') {
+                formSectionInput.value = 'requests';
+            } else {
+                formSectionInput.value = 'search';
+            }
+
             openModal('borrowModal');
         }
 
@@ -1530,9 +1589,6 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ============================================
-        // AI SEARCH FUNCTIONS
-        // ============================================
         let predictionTimeout = null;
         let searchSession = { queries: [], clicks: [], abandoned: [] };
 
@@ -1696,9 +1752,6 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
             window.location.href = 'student_dashboard.php?section=search';
         }
 
-        // ============================================
-        // PREDICTIVE SEARCH
-        // ============================================
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const clearBtn = document.getElementById('clearSearchBtn');
@@ -1779,9 +1832,6 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
             }
         });
 
-        // ============================================
-        // FRUSTRATION POPUP
-        // ============================================
         function showFrustrationPopup(analysis) {
             let popup = document.getElementById('aiAssistantPopup');
             if (!popup) {
