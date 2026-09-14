@@ -417,7 +417,7 @@ if (isset($_GET['action']) && $_GET['action'] === 'resend') {
             display: flex;
             justify-content: center;
             align-items: center;
-            background: #f5f3f0;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2a1a1a 50%, #ff0199c9 100%);
             padding: 20px;
         }
         
