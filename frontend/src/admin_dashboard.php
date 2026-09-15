@@ -1121,6 +1121,63 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .btn-confirm { padding: 10px 24px; background: #1a1a2e; color: #f0e8e8; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; }
         .btn-confirm:hover { background: #4a1a4a; }
 
+        /* ===== PAY FINE MODAL SPECIFIC ===== */
+        .pay-confirm-icon {
+            width: 64px; height: 64px;
+            border-radius: 50%;
+            background: #f0e8ee;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            font-size: 30px;
+            color: #b40f7d;
+        }
+        .pay-confirm-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            color: #1a1a2e;
+            margin-bottom: 8px;
+        }
+        .pay-confirm-sub {
+            text-align: center;
+            font-size: 14px;
+            color: #8a7a8a;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        .pay-detail-card {
+            background: #faf5fa;
+            border-radius: 10px;
+            padding: 14px 18px;
+            border: 1px solid #f0e0ee;
+            margin-bottom: 20px;
+        }
+        .pay-detail-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+            font-size: 14px;
+        }
+        .pay-detail-row:not(:last-child) {
+            border-bottom: 1px solid #f0e0ee;
+        }
+        .pay-detail-label {
+            color: #8a7a8a;
+            font-weight: 400;
+        }
+        .pay-detail-value {
+            color: #1a1a2e;
+            font-weight: 500;
+        }
+        .pay-detail-value.amount {
+            color: #b40f7d;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
         .return-confirm-icon {
             width: 64px; height: 64px;
             border-radius: 50%;
@@ -1922,7 +1979,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                         <td><span class="status-badge status-<?php echo strtolower($f['status'] ?? 'pending'); ?>"><?php echo $f['status'] ?? 'Pending'; ?></span></td>
                                         <td>
                                             <?php if (($f['status'] ?? '') !== 'Paid'): ?>
-                                                <a href="admin_dashboard.php?section=fines&action=pay&id=<?php echo $f['id']; ?>" class="btn-pay" onclick="return confirm('Mark this fine as paid?')">Pay</a>
+                                                <button class="btn-pay" onclick="openPayConfirm('<?php echo $f['id']; ?>', '<?php echo addslashes($studentName); ?>', '<?php echo addslashes($studentDisplayId); ?>', '<?php echo number_format($f['amount'] ?? 0, 2); ?>', '<?php echo addslashes($f['reason'] ?? 'Late Return'); ?>')">Pay</button>
                                             <?php else: ?>
                                                 <span style="color:#b0a8a0;font-size:12px;">Paid</span>
                                             <?php endif; ?>
@@ -1976,6 +2033,42 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <div class="modal-actions">
                             <button type="button" onclick="closeModal('addFineModal')" class="btn-cancel">Cancel</button>
                             <button type="submit" class="btn-confirm">Add Fine</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- ===== PAY FINE CONFIRMATION MODAL ===== -->
+            <div class="modal-overlay" id="payFineModal">
+                <div class="modal" style="max-width:460px;">
+                    <div class="pay-confirm-icon">₱</div>
+                    <div class="pay-confirm-title">Confirm Fine Payment</div>
+                    <div class="pay-confirm-sub">Please confirm that the student has paid this fine. This action will mark the fine as paid and cannot be undone.</div>
+                    <div class="pay-detail-card">
+                        <div class="pay-detail-row">
+                            <span class="pay-detail-label">Student</span>
+                            <span class="pay-detail-value" id="payStudentName">—</span>
+                        </div>
+                        <div class="pay-detail-row">
+                            <span class="pay-detail-label">Student ID</span>
+                            <span class="pay-detail-value" id="payStudentId">—</span>
+                        </div>
+                        <div class="pay-detail-row">
+                            <span class="pay-detail-label">Reason</span>
+                            <span class="pay-detail-value" id="payReason">—</span>
+                        </div>
+                        <div class="pay-detail-row">
+                            <span class="pay-detail-label">Amount Due</span>
+                            <span class="pay-detail-value amount" id="payAmount">₱0.00</span>
+                        </div>
+                    </div>
+                    <form method="GET" action="admin_dashboard.php" id="payFineForm">
+                        <input type="hidden" name="section" value="fines">
+                        <input type="hidden" name="action" value="pay">
+                        <input type="hidden" name="id" id="payFineId" value="">
+                        <div class="modal-actions">
+                            <button type="button" class="btn-cancel" onclick="closeModal('payFineModal')">Cancel</button>
+                            <button type="submit" class="btn-confirm">Confirm Payment</button>
                         </div>
                     </form>
                 </div>
@@ -2468,6 +2561,16 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             }
             document.getElementById('returnBookMeta').textContent = 'by ' + (studentName || 'Student') + ' (' + (studentId || 'N/A') + ') • ' + dueText;
             openModal('returnConfirmModal');
+        }
+
+        /* ===== PAY FINE CONFIRMATION ===== */
+        function openPayConfirm(fineId, studentName, studentId, amount, reason) {
+            document.getElementById('payFineId').value = fineId;
+            document.getElementById('payStudentName').textContent = studentName || 'Unknown';
+            document.getElementById('payStudentId').textContent = studentId || 'N/A';
+            document.getElementById('payReason').textContent = reason || 'Late Return';
+            document.getElementById('payAmount').textContent = '₱' + (amount || '0.00');
+            openModal('payFineModal');
         }
 
         function updateClock() {
