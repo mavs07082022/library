@@ -554,11 +554,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="login-footer">
                 <a href="forgot_password.php" class="forgot-link">Forgot Password?</a>
                 
-                <div class="register-link">
-                    <p style="text-align:center;margin-top:14px;font-size:14px;color:#8a7a6e;">
-                        Don't have an account? <a href="/student_register.php">Register here</a>
-                    </p>
-                </div>
+                
             </div>
         </div>
     </div>
