@@ -1,5 +1,6 @@
 <?php
-
+// admin_dashboard.php - Enhanced Admin Dashboard with Full AI-Powered Search
+// Auto-detects base path for firebase_config.js and ai_functions.js
 
 session_start();
 date_default_timezone_set('Asia/Manila');
@@ -71,6 +72,49 @@ function computeBorrowingStatus($borrowing) {
     }
     return $status;
 }
+
+/**
+ * Auto-detect the base path where firebase_config.js and ai_functions.js live.
+ * Walks up the directory tree from the current script location.
+ */
+function detectBasePath() {
+    $scriptDir = dirname($_SERVER['SCRIPT_NAME']); // e.g. /update-libV2_V2/frontend/src
+    $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT']), '/');
+    
+    $searchDir = $scriptDir;
+    
+    for ($i = 0; $i < 8; $i++) {
+        $checkDir = rtrim(str_replace('\\', '/', $searchDir), '/');
+        if ($checkDir === '/' || $checkDir === '\\' || $checkDir === '.') $checkDir = '';
+        
+        $fsPath = $docRoot . $checkDir . '/firebase_config.js';
+        
+        if (file_exists($fsPath)) {
+            return $checkDir;
+        }
+        
+        $parent = dirname($searchDir);
+        if ($parent === $searchDir || $parent === '/' || $parent === '\\' || $parent === '.') {
+            break;
+        }
+        $searchDir = $parent;
+    }
+    
+    // Fallback: known deployment path
+    $knownPaths = [
+        '/update-libV2_V2',
+        '/mavs07082022-library',
+        '',
+    ];
+    foreach ($knownPaths as $p) {
+        $fsPath = $docRoot . $p . '/firebase_config.js';
+        if (file_exists($fsPath)) return $p;
+    }
+    
+    return '';
+}
+
+$basePath = detectBasePath();
 
 $section = isset($_GET['section']) ? $_GET['section'] : 'dashboard';
 $action = isset($_GET['action']) ? $_GET['action'] : '';
@@ -231,18 +275,11 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
             ];
         }
         
-        // ============================================================
-        // PDF EXPORT
-        // ============================================================
         if ($_GET['format'] === 'pdf') {
-            // Clear any buffered output BEFORE sending PDF headers
             while (ob_get_level()) { ob_end_clean(); }
-            
-            // Suppress PHP notices/warnings that could corrupt the PDF bytes
             error_reporting(0);
             ini_set('display_errors', 0);
             
-            // Ensure FPDF is loaded using absolute path
             if (!class_exists('FPDF')) {
                 $fpdfTry = __DIR__ . '/fpdf.php';
                 if (file_exists($fpdfTry)) {
@@ -253,7 +290,6 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
             if (!class_exists('FPDF')) {
                 header('Content-Type: text/plain; charset=utf-8');
                 echo "PDF export failed: FPDF library not loaded.\n";
-                echo "Looked for: " . __DIR__ . "/fpdf.php\n";
                 exit;
             }
             
@@ -270,19 +306,16 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
                 
                 $primaryColor = array(180, 15, 125);
                 
-                // Title
                 $pdf->SetFont('Arial', 'B', 20);
                 $pdf->SetTextColor($primaryColor[0], $primaryColor[1], $primaryColor[2]);
                 $pdf->Cell(0, 15, 'Book Inventory Report', 0, 1, 'C');
                 
-                // Subtitle / metadata
                 $pdf->SetFont('Arial', '', 11);
                 $pdf->SetTextColor(80, 80, 80);
                 $pdf->Cell(0, 8, 'Generated: ' . date('F j, Y g:i A'), 0, 1, 'C');
                 $pdf->Cell(0, 8, 'Total Books: ' . count($exportData), 0, 1, 'C');
                 $pdf->Ln(8);
                 
-                // Table header
                 $pdf->SetFont('Arial', 'B', 10);
                 $pdf->SetFillColor($primaryColor[0], $primaryColor[1], $primaryColor[2]);
                 $pdf->SetTextColor(255, 255, 255);
@@ -303,7 +336,6 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
                 }
                 $pdf->Ln();
                 
-                // Table rows
                 $pdf->SetFont('Arial', '', 8);
                 $pdf->SetTextColor(0, 0, 0);
                 $fill = false;
@@ -325,7 +357,6 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
                     $fill = !$fill;
                     $rowCount++;
                     
-                    // Every 25 rows, add a new page with a repeated header
                     if ($rowCount % 25 == 0) {
                         $pdf->AddPage();
                         $pdf->SetFont('Arial', 'B', 10);
@@ -342,7 +373,6 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
                     }
                 }
                 
-                // Final buffer flush before output
                 while (ob_get_level()) { ob_end_clean(); }
                 
                 $pdf->Output('D', 'books_export_' . date('Y-m-d') . '.pdf');
@@ -354,9 +384,6 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
                 exit;
             }
             
-        // ============================================================
-        // EXCEL EXPORT
-        // ============================================================
         } elseif ($_GET['format'] === 'excel') {
             header('Content-Type: application/vnd.ms-excel');
             header('Content-Disposition: attachment; filename="books_export_' . date('Y-m-d') . '.xls"');
@@ -735,15 +762,18 @@ $fines = [];
 $fineSettings = [];
 $academicYears = [];
 $students = [];
+$reservations = [];
+$notifications = [];
 $bookError = '';
 $userMessage = isset($_GET['msg']) ? $_GET['msg'] : '';
 $bookSearchTerm = isset($_GET['search']) ? $_GET['search'] : '';
 $userSearchTerm = isset($_GET['user_search']) ? $_GET['user_search'] : '';
 $userFilterRole = isset($_GET['user_filter']) ? $_GET['user_filter'] : 'all';
 $aiClassified = isset($_GET['ai_classified']) ? $_GET['ai_classified'] : '';
+$searchQuery = isset($_GET['q']) ? $_GET['q'] : '';
 
 try {
-    $books = supabaseRequest('books?select=*');
+    $books = supabaseRequest('books?select=*,categories(name)');
     $categories = supabaseRequest('categories?select=*');
     $users = supabaseRequest('users?select=*');
     $students = supabaseRequest('students?select=*,users(full_name,user_id,email)');
@@ -768,6 +798,18 @@ try {
     $fines = supabaseRequest('fines?select=*');
     $fineSettings = supabaseRequest('fine_settings?select=*');
     $academicYears = supabaseRequest('academic_years?select=*');
+    
+    try {
+        $reservations = supabaseRequest('reservations?select=*,books(title,author)&order=reservation_date.desc');
+    } catch (Exception $e) {
+        $reservations = [];
+    }
+    
+    try {
+        $notifications = supabaseRequest('notifications?select=*&order=created_at.desc&limit=50');
+    } catch (Exception $e) {
+        $notifications = [];
+    }
 } catch (Exception $e) {
     $bookError = $e->getMessage();
 }
@@ -803,7 +845,10 @@ function getPlaceholderColor($id) {
 }
 
 function hasValidCoverImage($coverImage) {
-    return !empty($coverImage) && strlen($coverImage) > 100 && strpos($coverImage, 'data:image') === 0;
+    if (empty($coverImage)) return false;
+    if (strpos($coverImage, 'data:image') === 0) return strlen($coverImage) > 100;
+    if (filter_var($coverImage, FILTER_VALIDATE_URL)) return true;
+    return false;
 }
 
 $stats = [
@@ -821,7 +866,8 @@ $stats = [
     'pendingFines' => count(array_filter($fines, function($f) {
         return ($f['status'] ?? '') !== 'Paid';
     })),
-    'paidFines' => count(array_filter($fines, function($f) { return ($f['status'] ?? '') === 'Paid'; }))
+    'paidFines' => count(array_filter($fines, function($f) { return ($f['status'] ?? '') === 'Paid'; })),
+    'totalReservations' => count($reservations)
 ];
 
 $borrowingRate = $stats['totalBooks'] > 0 ? round(($stats['totalBorrowings'] / $stats['totalBooks']) * 100) : 0;
@@ -834,9 +880,6 @@ $present = min(85, round(($stats['totalBorrowings'] / ($total * 2)) * 100));
 $late = min(15, round(($stats['totalOverdue'] / ($total * 2)) * 100));
 $absent = max(0, 100 - $present - $late - 5);
 $excused = 5;
-$presentCirc = ($present / 100) * 251.2;
-$lateCirc = ($late / 100) * 188.4;
-$absentCirc = ($absent / 100) * 125.6;
 
 $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' => 50, 'lost_book_fee' => 500, 'damaged_book_fee' => 200, 'grace_period' => 0];
 ?>
@@ -846,10 +889,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <title>Admin Dashboard - St. Agnes Academy Caloocan Inc.</title>
-    <link rel="icon" href="/favicon.ico" sizes="any">
-    <link rel="icon" type="image/png" sizes="96x96" href="/img/favicon-96x96.png">
-    <link rel="apple-touch-icon" sizes="180x180" href="/img/apple-touch-icon.png">
-    <link rel="manifest" href="/site.webmanifest">
     <meta name="theme-color" content="#e51d66">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -859,7 +898,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         ::-webkit-scrollbar-track { background: #f5e8f0; }
         ::-webkit-scrollbar-thumb { background: #d4a8c0; border-radius: 3px; }
 
-        /* ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== */
         .top-header {
             position: fixed;
             top: 0;
@@ -890,7 +928,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .hamburger-btn:hover { background: rgba(180, 15, 125, 0.18); border-color: rgba(180, 15, 125, 0.3); }
         .hamburger-lines { display: flex; flex-direction: column; gap: 4px; width: 18px; }
         .hamburger-lines span { display: block; height: 2px; width: 100%; background: #e8dce8; border-radius: 2px; transition: 0.3s; }
-        .header-title-symbol { color: #f0e8e8; font-size: 17px; opacity: 0.85; }
         .header-nav-symbols { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
         .header-nav-symbols a {
             display: flex; align-items: center; justify-content: center;
@@ -914,7 +951,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             padding: 0 4px;
         }
 
-        /* ===== SIDEBAR ===== */
         .admin-sidebar {
             width: 240px;
             background: #010107;
@@ -983,7 +1019,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .logout-btn { width: 100%; padding: 10px 16px; background: rgba(180, 15, 125, 0.15); color: #d460b8; border: 1px solid rgba(180, 15, 125, 0.2); border-radius: 8px; cursor: pointer; font-size: 14px; transition: all 0.2s ease; text-decoration: none; text-align: center; display: block; font-weight: 500; }
         .logout-btn:hover { background: rgba(180, 15, 125, 0.2); border-color: rgba(180, 15, 125, 0.3); }
 
-        /* ===== MAIN CONTENT ===== */
         .admin-content { margin-left: 240px; flex: 1; padding: 80px 40px 32px; background: #f8f0f5; min-height: 100vh; transition: margin-left 0.25s ease; }
         .admin-content.collapsed { margin-left: 70px; }
 
@@ -1019,17 +1054,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .progress-fill { height: 100%; background: #b40f7d; border-radius: 2px; transition: width 0.6s ease; }
         .analytics-value { font-size: 14px; font-weight: 600; color: #1a1a2e; }
 
-        .dashboard-grid { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; margin-bottom: 24px; }
-        .card { background: #ffffff; border-radius: 16px; border: 1px solid #f0e0ee; overflow: hidden; }
-        .card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-bottom: 1px solid #f5eef5; }
-        .card-header h3 { font-size: 15px; color: #1a1a2e; margin: 0; font-weight: 600; }
-        .view-all { color: #b40f7d; text-decoration: none; font-size: 13px; font-weight: 500; }
-        .card-body { padding: 16px 24px; }
-        .no-activity { text-align: center; padding: 32px 0; }
-        .no-activity-icon { font-size: 36px; display: block; margin-bottom: 8px; opacity: 0.3; color: #b40f7d; }
-        .no-activity p { color: #b8a8b8; font-size: 14px; margin: 0; }
-
-        .quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+        .quick-actions { display: grid; grid-template-columns: repeat(6, 1fr); gap: 12px; margin-bottom: 24px; }
         .quick-action-card { background: #ffffff; border-radius: 12px; padding: 18px 16px; text-align: center; cursor: pointer; transition: all 0.2s ease; border: 1px solid #f0e0ee; text-decoration: none; color: inherit; display: block; position: relative; }
         .quick-action-card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.06); border-color: #d460b8; }
         .action-icon { font-size: 22px; display: block; margin-bottom: 6px; opacity: 0.6; color: #b40f7d; }
@@ -1058,15 +1083,14 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .count-badge { color: #8a7a8a; font-size: 14px; white-space: nowrap; font-weight: 400; }
         .count-badge.overdue-warning { color: #8a2a5a; font-weight: 600; }
 
-        .filter-dropdown { padding: 10px 16px; border: 2px solid #f0e0ee; border-radius: 10px; font-size: 14px; background: #ffffff; color: #1a1a2e; cursor: pointer; min-width: 140px; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238a7a8a' d='M6 8L1 3h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 40px; }
-        .filter-dropdown:focus { border-color: #b40f7d; outline: none; box-shadow: 0 0 0 3px rgba(180, 15, 125, 0.12); }
+        .filter-dropdown { padding: 10px 16px; border: 2px solid #f0e0ee; border-radius: 10px; font-size: 14px; background: #ffffff; color: #1a1a2e; cursor: pointer; min-width: 140px; }
 
         .message { padding: 14px 20px; border-radius: 10px; margin-bottom: 20px; font-weight: 500; }
         .message.success { background: #f0e8ee; color: #3a2a3a; border-left: 4px solid #b40f7d; }
         .message.error { background: #f0e0e8; color: #8a2a5a; border-left: 4px solid #d460b8; }
         .message.info { background: #e8e4e8; color: #3a3a3a; border-left: 4px solid #b8a8b8; }
 
-        .table-container { background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #f0e0ee; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+        .table-container { background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #f0e0ee; overflow-x: auto; }
         .data-table { width: 100%; border-collapse: collapse; min-width: 640px; }
         .data-table th { background: #f5eef5; padding: 12px 16px; text-align: left; font-weight: 600; color: #4a3a4a; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; white-space: nowrap; }
         .data-table td { padding: 12px 16px; border-top: 1px solid #f5eef5; vertical-align: middle; color: #2a2a2a; font-size: 14px; }
@@ -1121,164 +1145,82 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .btn-confirm { padding: 10px 24px; background: #1a1a2e; color: #f0e8e8; border: none; border-radius: 8px; cursor: pointer; font-size: 14px; font-weight: 500; }
         .btn-confirm:hover { background: #4a1a4a; }
 
-        /* ===== PAY FINE MODAL SPECIFIC ===== */
-        .pay-confirm-icon {
-            width: 64px; height: 64px;
-            border-radius: 50%;
-            background: #f0e8ee;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 16px;
-            font-size: 30px;
-            color: #b40f7d;
-        }
-        .pay-confirm-title {
-            text-align: center;
-            font-size: 18px;
-            font-weight: 600;
-            color: #1a1a2e;
-            margin-bottom: 8px;
-        }
-        .pay-confirm-sub {
-            text-align: center;
-            font-size: 14px;
-            color: #8a7a8a;
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-        .pay-detail-card {
-            background: #faf5fa;
-            border-radius: 10px;
-            padding: 14px 18px;
-            border: 1px solid #f0e0ee;
-            margin-bottom: 20px;
-        }
-        .pay-detail-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 6px 0;
-            font-size: 14px;
-        }
-        .pay-detail-row:not(:last-child) {
-            border-bottom: 1px solid #f0e0ee;
-        }
-        .pay-detail-label {
-            color: #8a7a8a;
-            font-weight: 400;
-        }
-        .pay-detail-value {
-            color: #1a1a2e;
-            font-weight: 500;
-        }
-        .pay-detail-value.amount {
-            color: #b40f7d;
-            font-weight: 700;
-            font-size: 16px;
-        }
-
-        .return-confirm-icon {
-            width: 64px; height: 64px;
-            border-radius: 50%;
-            background: #f0e8ee;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin: 0 auto 16px;
-            font-size: 30px;
-            color: #b40f7d;
-        }
-        .return-confirm-title {
-            text-align: center;
-            font-size: 18px;
-            font-weight: 600;
-            color: #1a1a2e;
-            margin-bottom: 8px;
-        }
-        .return-confirm-sub {
-            text-align: center;
-            font-size: 14px;
-            color: #8a7a8a;
-            margin-bottom: 20px;
-            line-height: 1.5;
-        }
-        .return-book-preview {
-            background: #faf5fa;
-            border-radius: 10px;
-            padding: 14px 18px;
-            border: 1px solid #f0e0ee;
-            margin-bottom: 20px;
-        }
-        .return-book-preview .rb-title {
-            font-weight: 600;
-            color: #1a1a2e;
-            font-size: 15px;
-        }
-        .return-book-preview .rb-meta {
-            font-size: 13px;
-            color: #8a7a8a;
-            margin-top: 2px;
-        }
-
         .cover-upload-container { border: 2px dashed #f0e0ee; border-radius: 8px; padding: 16px; text-align: center; min-height: 140px; display: flex; align-items: center; justify-content: center; position: relative; background: #faf5fa; }
         .cover-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
         .cover-placeholder { display: flex; flex-direction: column; align-items: center; gap: 6px; color: #8a7a8a; }
         .cover-icon { font-size: 36px; opacity: 0.4; color: #b40f7d; }
-        .cover-hint { font-size: 12px; color: #c8b8c8; }
         .cover-preview-container { position: relative; display: inline-block; }
         .cover-preview { max-width: 150px; max-height: 200px; object-fit: cover; border-radius: 8px; }
         .btn-remove-cover { position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; border-radius: 50%; background: #f0e0e8; color: #8a2a5a; border: 2px solid #ffffff; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
 
-        .stats-grid-reports { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 28px; }
-        .stat-card-report { background: #ffffff; padding: 20px 24px; border-radius: 12px; border: 1px solid #f0e0ee; }
-        .stat-card-report h3 { font-size: 28px; margin: 0; color: #1a1a2e; font-weight: 700; }
-        .stat-card-report p { margin: 4px 0 0; color: #8a7a8a; }
-        .export-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+        /* ===== BOOK GRID ===== */
+        .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
+        .book-card { background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #f0e0ee; transition: all 0.3s ease; display: flex; flex-direction: column; min-width: 0; }
+        .book-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.08); border-color: #d460b8; }
+        .book-card .book-cover-wrapper { height: 200px; background: #f5eef5; display: flex; align-items: center; justify-content: center; position: relative; overflow: hidden; flex-shrink: 0; }
+        .book-card .book-cover-wrapper img { width: 100%; height: 100%; object-fit: cover; }
+        .book-card .book-cover-wrapper .cover-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; height: 100%; color: #ffffff; font-size: 48px; font-weight: bold; }
+        .book-card .book-cover-wrapper .cover-placeholder .initial { font-size: 64px; text-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .book-card .book-cover-wrapper .availability-badge { position: absolute; top: 12px; right: 12px; padding: 4px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; color: #f0e8e8; background: #3a2a2a; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .book-card .book-cover-wrapper .availability-badge.low { background: #8a7a6e; }
+        .book-card .book-cover-wrapper .availability-badge.none { background: #8a3a2a; }
+        .book-card .book-info { padding: 16px 20px 20px; flex: 1; display: flex; flex-direction: column; }
+        .book-card .book-info .book-title { font-size: 16px; font-weight: 600; color: #1a1a2e; margin: 0 0 4px 0; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .book-card .book-info .book-author { font-size: 14px; color: #6a5a4e; margin: 0 0 8px 0; }
+        .book-card .book-info .book-category { display: inline-block; background: #f0edea; color: #4a3a2e; padding: 2px 12px; border-radius: 12px; font-size: 12px; margin-bottom: 8px; align-self: flex-start; }
+        .book-card .book-info .book-meta { display: flex; justify-content: space-between; align-items: center; padding-top: 12px; border-top: 1px solid #f0edea; margin-top: auto; flex-wrap: wrap; gap: 8px; }
+        .book-card .book-info .book-meta .availability { font-size: 14px; color: #6a5a4e; }
+        .book-card .book-info .book-meta .availability strong { color: #1a1a2e; }
+        .book-card .book-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+        .book-card .relevance-score { padding: 2px 12px; border-radius: 12px; font-size: 11px; background: #f0edea; color: #4a3a2e; align-self: flex-end; margin-top: 4px; }
 
-        .settings-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
-        .setting-item { display: flex; flex-direction: column; gap: 4px; }
-        .setting-item label { font-weight: 600; font-size: 14px; color: #4a3a4a; }
-        .setting-item input { padding: 10px 14px; border: 2px solid #f0e0ee; border-radius: 8px; font-size: 14px; background: #faf5fa; width: 100%; }
-        .academic-year-item { display: flex; gap: 20px; padding: 12px 0; border-bottom: 1px solid #f5eef5; flex-wrap: wrap; align-items: center; }
+        /* ===== PREDICTIVE SEARCH DROPDOWN ===== */
+        .predictive-results { position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 2px solid #f0e0ee; border-top: none; border-radius: 0 0 12px 12px; max-height: 400px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
+        .predictive-results.visible { display: block; }
+        .predictive-item { padding: 12px 16px; border-bottom: 1px solid #f5eef5; cursor: pointer; transition: background 0.2s ease; }
+        .predictive-item:hover { background: #faf5fa; }
+        .predictive-item .pred-title { font-weight: 500; color: #1a1a2e; font-size: 14px; }
+        .predictive-item .pred-author { color: #6a5a4e; font-size: 13px; }
+        .predictive-item .pred-score { float: right; font-size: 12px; color: #8a7a8a; }
+        .predictive-item .pred-badge { display: inline-block; background: #f0e8ee; color: #4a3a4a; font-size: 10px; padding: 2px 10px; border-radius: 10px; margin-left: 8px; }
+        .loading-predictions { padding: 20px; text-align: center; color: #8a7a8a; }
+        .loading-predictions .spinner { width: 24px; height: 24px; border: 3px solid #f0e8ee; border-top-color: #b40f7d; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* ============================================
-           RESPONSIVE BREAKPOINTS
-           ============================================ */
+        /* ===== AI ASSISTANT POPUP ===== */
+        .ai-assistant-popup { position: fixed; bottom: 30px; right: 30px; background: #ffffff; border-radius: 16px; padding: 24px 28px; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); border: 1px solid #f0e0ee; z-index: 9999; display: none; }
+        .ai-assistant-popup.visible { display: block; }
+        .ai-assistant-popup .popup-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+        .ai-assistant-popup .popup-header h3 { margin: 0; font-size: 16px; color: #1a1a2e; font-weight: 600; }
+        .ai-assistant-popup .popup-header .close-popup { background: none; border: none; font-size: 22px; color: #8a7a8a; cursor: pointer; }
+        .ai-assistant-popup .popup-body { color: #4a3a4a; font-size: 14px; line-height: 1.6; }
+        .ai-assistant-popup .popup-body ul { margin: 8px 0 12px 20px; color: #6a5a4e; font-size: 13px; }
+        .ai-assistant-popup .popup-actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; }
+        .ai-assistant-popup .popup-actions .btn-help { padding: 8px 20px; background: #1a1a2e; color: #f0e8e8; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; text-decoration: none; }
+        .ai-assistant-popup .popup-actions .btn-dismiss { padding: 8px 20px; background: #f0e8ee; color: #4a3a4a; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
+
+        /* ===== SEARCH INFO BADGES ===== */
+        .search-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+        .search-type-badge { font-size: 12px; padding: 4px 14px; border-radius: 20px; font-weight: 500; background: #f0e8ee; color: #4a3a4a; }
+        .search-time { font-size: 12px; color: #b0a8b0; }
 
         @media (max-width: 1200px) {
             .stats-grid { grid-template-columns: repeat(4, 1fr); }
+            .quick-actions { grid-template-columns: repeat(3, 1fr); }
         }
 
         @media (max-width: 992px) {
             .admin-content { padding: 80px 24px 24px; }
             .stats-grid { grid-template-columns: repeat(3, 1fr); }
-            .dashboard-grid { grid-template-columns: 1fr; }
             .analytics-grid { grid-template-columns: repeat(2, 1fr); }
-            .quick-actions { grid-template-columns: repeat(2, 1fr); }
-            .dashboard-header { padding: 24px 24px; }
+            .quick-actions { grid-template-columns: repeat(3, 1fr); }
         }
 
-        /* =========================================
-           MOBILE / TABLET: Sidebar slides in below header
-           ========================================= */
         @media (max-width: 900px) {
-            /* Header spans full width */
-            .top-header {
-                left: 0 !important;
-                right: 0 !important;
-                padding: 0 12px;
-                height: 56px;
-                z-index: 1100;
-            }
+            .top-header { left: 0 !important; right: 0 !important; padding: 0 12px; height: 56px; z-index: 1100; }
             .top-header.collapsed { left: 0 !important; }
-
-            /* Hide some header icons on smaller screens if needed */
-            .header-title-symbol { display: none; }
-
-            /* Sidebar becomes a slide-in drawer BELOW the header */
             .admin-sidebar {
-                top: 56px !important;               /* sits below header */
+                top: 56px !important;
                 left: 0;
                 width: 280px !important;
                 height: calc(100vh - 56px) !important;
@@ -1286,12 +1228,8 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 transition: transform 0.3s ease;
                 box-shadow: 6px 0 24px rgba(0,0,0,0.35);
                 z-index: 1050;
-                border-right: 1px solid #2a2a3e;
             }
-            .admin-sidebar.mobile-open {
-                transform: translateX(0);
-            }
-            /* Force full expanded styling inside drawer */
+            .admin-sidebar.mobile-open { transform: translateX(0); }
             .admin-sidebar.collapsed { width: 280px !important; }
             .admin-sidebar.collapsed .sidebar-header .school-name,
             .admin-sidebar.collapsed .sidebar-header .school-sub,
@@ -1304,18 +1242,8 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             .admin-sidebar.collapsed .sidebar-header .sidebar-logo { max-width: 56px; width: 56px; margin: 0 0 10px; }
             .admin-sidebar.collapsed .sidebar-footer { padding: 16px 24px 24px; }
             .admin-sidebar.collapsed .logout-btn .logout-text { display: inline; }
-            .admin-sidebar.collapsed .request-count-badge { position: static; margin-left: auto; }
-            .admin-sidebar.collapsed .sidebar-nav a { position: relative; }
-
-            /* Shrink sidebar header for mobile drawer */
-            .admin-sidebar .sidebar-header { padding: 20px 24px 16px; }
-            .admin-sidebar .sidebar-header .sidebar-logo { max-width: 56px; width: 56px; margin-bottom: 10px; }
-
-            /* Main content full width */
             .admin-content { margin-left: 0 !important; padding: 74px 16px 24px; }
             .admin-content.collapsed { margin-left: 0 !important; }
-
-            /* Overlay */
             .mobile-overlay { z-index: 1040; }
         }
 
@@ -1323,132 +1251,83 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             .top-header { padding: 0 10px; height: 54px; }
             .header-nav-symbols a { width: 34px; height: 34px; font-size: 15px; }
             .hamburger-btn { width: 36px; height: 36px; }
-
             .admin-sidebar { top: 54px !important; height: calc(100vh - 54px) !important; }
             .admin-content { padding: 70px 14px 24px; }
-
             .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
             .stat-number { font-size: 20px; }
-            .stat-label { font-size: 10px; }
-
             .dashboard-header { flex-direction: column; align-items: flex-start; padding: 20px; gap: 12px; }
             .dashboard-header h1 { font-size: 17px; }
             .header-time { text-align: left; width: 100%; padding: 8px 14px; }
             .header-time .time { font-size: 17px; }
-
-            .quick-actions { grid-template-columns: 1fr 1fr; gap: 10px; }
+            .quick-actions { grid-template-columns: repeat(2, 1fr); gap: 10px; }
             .analytics-grid { grid-template-columns: 1fr; gap: 14px; }
-            .analytics-summary { padding: 18px 18px; }
-
             .section-header { flex-direction: column; align-items: flex-start; }
             .section-header h1 { font-size: 17px; }
-            .header-actions { width: 100%; flex-wrap: wrap; gap: 8px; }
-            .header-actions .btn-export,
-            .header-actions .btn-add { flex: 1 1 auto; text-align: center; padding: 10px 14px; font-size: 13px; }
-
             .search-bar { flex-direction: column; align-items: stretch; gap: 10px; }
             .search-bar .search-input-wrapper { min-width: 0; width: 100%; }
             .filter-dropdown { width: 100%; min-width: 0; }
             .count-badge { text-align: right; width: 100%; }
-
             .modal { padding: 22px 18px; border-radius: 14px; }
             .modal h3 { font-size: 17px; margin-bottom: 16px; }
             .modal .modal-actions { flex-direction: column-reverse; gap: 8px; }
             .modal .modal-actions button { width: 100%; }
-
-            .stats-grid-reports { grid-template-columns: 1fr 1fr; gap: 12px; }
-            .stat-card-report { padding: 16px 18px; }
-            .stat-card-report h3 { font-size: 22px; }
-
-            .settings-grid { grid-template-columns: 1fr; }
-
             .data-table th, .data-table td { padding: 10px 12px; font-size: 13px; }
-            .data-table { min-width: 600px; }
-
-            .academic-year-item { flex-direction: column; align-items: flex-start; gap: 6px; }
+            .book-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
+            .book-card .book-cover-wrapper { height: 170px; }
         }
 
         @media (max-width: 480px) {
             .top-header { padding: 0 8px; height: 52px; }
-            .header-left-group { gap: 8px; }
             .hamburger-btn { width: 34px; height: 34px; border-radius: 7px; }
-            .hamburger-lines { width: 16px; gap: 3px; }
-            .header-nav-symbols { gap: 1px; }
             .header-nav-symbols a { width: 32px; height: 32px; font-size: 14px; border-radius: 7px; }
-            .header-nav-symbols a .header-badge { font-size: 8px; min-width: 13px; height: 13px; top: 2px; right: 2px; padding: 0 3px; }
-
             .admin-sidebar { top: 52px !important; height: calc(100vh - 52px) !important; width: 270px !important; }
             .admin-content { padding: 66px 10px 20px; }
-
             .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
             .stat-card { padding: 12px 8px; }
             .stat-number { font-size: 18px; }
-            .stat-sub { display: none; }
-
-            .dashboard-header { padding: 16px; border-radius: 12px; }
-            .dashboard-header h1 { font-size: 15px; }
-            .dashboard-header .header-sub { font-size: 11px; }
-
             .quick-actions { grid-template-columns: 1fr 1fr; gap: 8px; }
             .quick-action-card { padding: 14px 8px; }
             .action-icon { font-size: 19px; }
             .action-label { font-size: 11px; }
-
-            .analytics-summary { padding: 14px; border-radius: 12px; }
-            .analytics-header { gap: 8px; }
-            .analytics-header h2 { font-size: 14px; }
-            .btn-view-analytics { padding: 7px 12px; font-size: 11px; }
-
             .section-header h1 { font-size: 15px; }
             .btn-add, .btn-save, .btn-export { padding: 9px 14px; font-size: 12px; }
-
-            .message { padding: 11px 14px; font-size: 12px; }
-
-            .stats-grid-reports { grid-template-columns: 1fr; gap: 10px; }
-            .stat-card-report { padding: 14px 16px; }
-            .stat-card-report h3 { font-size: 19px; }
-
             .modal { padding: 18px 14px; border-radius: 12px; }
             .modal h3 { font-size: 15px; }
-            .modal .form-group label { font-size: 13px; }
-            .modal .form-group input, .modal .form-group select, .modal .form-group textarea { padding: 9px 12px; font-size: 13px; }
-
-            .cover-preview { max-width: 120px; max-height: 160px; }
-
             .data-table th, .data-table td { padding: 9px 10px; font-size: 12px; }
-            .data-table { min-width: 560px; }
-            .book-cover-small { width: 42px; height: 56px; }
-            .cover-placeholder-small { width: 42px; height: 56px; font-size: 18px; }
-
-            .btn-edit, .btn-delete, .btn-toggle, .btn-return, .btn-pay { padding: 5px 10px; font-size: 11px; }
+            .book-grid { grid-template-columns: 1fr !important; gap: 14px; }
+            .book-card .book-cover-wrapper { height: 220px; }
+            .ai-assistant-popup { bottom: 12px; right: 12px; left: 12px; max-width: none; padding: 18px 20px; }
         }
 
-        @media (max-width: 360px) {
-            .header-nav-symbols a { width: 30px; height: 30px; font-size: 13px; }
-            .hamburger-btn { width: 32px; height: 32px; }
-            .stats-grid { grid-template-columns: 1fr; }
-            .quick-actions { grid-template-columns: 1fr; }
-        }
-
-        /* Touch devices: remove hover transforms */
         @media (hover: none) {
-            .stat-card:hover,
-            .quick-action-card:hover,
-            .btn-add:hover, .btn-save:hover, .btn-export:hover,
-            .btn-edit:hover, .btn-delete:hover,
-            .btn-cancel:hover, .btn-confirm:hover,
-            .btn-view-analytics:hover { transform: none; box-shadow: none; }
+            .stat-card:hover, .quick-action-card:hover, .book-card:hover { transform: none; }
         }
     </style>
+    
+    <!-- Load Firebase and AI functions - path auto-detected -->
+    <script src="<?php echo $basePath; ?>/firebase_config.js"></script>
+    <script src="<?php echo $basePath; ?>/ai_functions.js"></script>
+    <script>
+    document.addEventListener('DOMContentLoaded', async function() {
+        try {
+            if (window.firebaseServices && typeof window.firebaseServices.initialize === 'function') {
+                await window.firebaseServices.initialize();
+                console.log('✅ Firebase AI ready for admin dashboard');
+            } else {
+                console.error('❌ firebaseServices not available - check if firebase_config.js loaded');
+            }
+        } catch (err) {
+            console.error('❌ Firebase init failed:', err);
+        }
+    });
+    </script>
 </head>
 <body>
-    <!-- ===== TOP HEADER NAVIGATION (SYMBOLS ONLY) ===== -->
     <header class="top-header" id="topHeader">
         <div class="header-left-group">
             <button class="hamburger-btn" onclick="toggleSidebar()" title="Toggle Sidebar" aria-label="Toggle Sidebar">
                 <span class="hamburger-lines"><span></span><span></span><span></span></span>
             </button>
-           
         </div>
         <nav class="header-nav-symbols">
             <a href="admin_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Dashboard">
@@ -1472,6 +1351,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <span class="header-badge"><?php echo count($pendingRequests); ?></span>
                 <?php endif; ?>
             </a>
+            <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>" title="Search Books">
+                <span>🔍</span>
+            </a>
             <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>" title="Reports">
                 <span>🖹</span>
             </a>
@@ -1485,7 +1367,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         <div class="admin-sidebar" id="sidebar">
             <div class="sidebar-header">
                 <div class="sidebar-logo-wrapper">
-                    <img src="img/agustinnb.png" alt="SAAC Logo" class="sidebar-logo" id="sidebarLogo">
+                    <img src="<?php echo $basePath; ?>/frontend/src/img/agustinnb.png" alt="SAAC Logo" class="sidebar-logo" id="sidebarLogo" onerror="this.style.display='none'">
                 </div>
                 <div class="school-name">ST. AGNES ACADEMY</div>
                 <div class="school-sub">Caloocan Inc.</div>
@@ -1522,6 +1404,14 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <span class="request-count-badge"><?php echo count($pendingRequests); ?></span>
                     <?php endif; ?>
                 </a>
+                <a href="admin_dashboard.php?section=reservations" class="<?php echo $section === 'reservations' ? 'active' : ''; ?>">
+                    <span class="nav-icon">⏱</span>
+                    <span class="nav-label">Reservations</span>
+                </a>
+                <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>">
+                    <span class="nav-icon">🔍</span>
+                    <span class="nav-label">Search Books</span>
+                </a>
                 <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>">
                     <span class="nav-icon">🖹</span>
                     <span class="nav-label">Reports</span>
@@ -1543,10 +1433,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         <div class="admin-content" id="adminContent">
             <?php if ($userMessage): ?>
                 <div class="message info"><?php echo htmlspecialchars($userMessage); ?></div>
-            <?php endif; ?>
-
-            <?php if ($aiClassified == '1'): ?>
-                <div class="message success">Book added successfully!</div>
             <?php endif; ?>
 
             <?php if ($section === 'dashboard'): ?>
@@ -1584,12 +1470,12 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <div class="stat-label">Overdue Books</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number"><?php echo min($absent, 100); ?>%</div>
-                        <div class="stat-label">Inactive Users</div>
+                        <div class="stat-number"><?php echo $stats['totalReservations']; ?></div>
+                        <div class="stat-label">Reservations</div>
                     </div>
                     <div class="stat-card">
-                        <div class="stat-number"><?php echo $excused; ?>%</div>
-                        <div class="stat-label">Reserved Books</div>
+                        <div class="stat-number">₱<?php echo number_format($stats['totalFines'], 2); ?></div>
+                        <div class="stat-label">Total Fines</div>
                     </div>
                 </div>
                 <div class="analytics-summary">
@@ -1629,9 +1515,17 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <span class="action-icon">◈</span>
                         <span class="action-label">Add User</span>
                     </a>
-                    <a href="admin_dashboard.php?section=reports" class="quick-action-card">
-                        <span class="action-icon">◉</span>
-                        <span class="action-label">Export Reports</span>
+                    <a href="admin_dashboard.php?section=search" class="quick-action-card">
+                        <span class="action-icon">🔍</span>
+                        <span class="action-label">Search Books</span>
+                    </a>
+                    <a href="admin_dashboard.php?section=borrowings" class="quick-action-card">
+                        <span class="action-icon">⎘</span>
+                        <span class="action-label">Manage Borrowings</span>
+                    </a>
+                    <a href="admin_dashboard.php?section=reservations" class="quick-action-card">
+                        <span class="action-icon">⏱</span>
+                        <span class="action-label">Reservations</span>
                     </a>
                     <a href="admin_dashboard.php?section=requests" class="quick-action-card" style="position:relative;">
                         <span class="action-icon">🖺</span>
@@ -1712,55 +1606,25 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <div class="modal">
                     <h3>Add New Book</h3>
                     <form method="POST" action="admin_dashboard.php?section=books&action=add_book" enctype="multipart/form-data" id="addBookForm">
-                        <div class="form-group">
-                            <label>Title *</label>
-                            <input type="text" name="title" id="add_book_title" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Author *</label>
-                            <input type="text" name="author" id="add_book_author" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Description</label>
-                            <textarea name="description" id="add_book_description" rows="3" placeholder="Describe the book content..."></textarea>
-                        </div>
-                        <div class="form-group">
-                            <label>ISBN</label>
-                            <input type="text" name="isbn">
-                        </div>
-                        <div class="form-group">
-                            <label>Publisher</label>
-                            <input type="text" name="publisher">
-                        </div>
-                        <div class="form-group">
-                            <label>Year Published</label>
-                            <input type="number" name="year_published" min="1000" max="<?php echo date('Y'); ?>">
-                        </div>
+                        <div class="form-group"><label>Title *</label><input type="text" name="title" required></div>
+                        <div class="form-group"><label>Author *</label><input type="text" name="author" required></div>
+                        <div class="form-group"><label>Description</label><textarea name="description" rows="3"></textarea></div>
+                        <div class="form-group"><label>ISBN</label><input type="text" name="isbn"></div>
+                        <div class="form-group"><label>Publisher</label><input type="text" name="publisher"></div>
+                        <div class="form-group"><label>Year Published</label><input type="number" name="year_published" min="1000" max="<?php echo date('Y'); ?>"></div>
                         <div class="form-group">
                             <label>Category</label>
-                            <select name="category_id" id="add_book_category">
+                            <select name="category_id">
                                 <option value="">Select Category</option>
                                 <?php foreach ($categories as $cat): ?>
                                     <option value="<?php echo $cat['id']; ?>"><?php echo htmlspecialchars($cat['name']); ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Quantity *</label>
-                            <input type="number" name="quantity" min="1" value="1" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Available</label>
-                            <input type="number" name="available" min="0" value="1">
-                        </div>
-                        <div class="form-group">
-                            <label>Location</label>
-                            <input type="text" name="location" placeholder="Shelf A-1">
-                        </div>
-                        <div class="form-group">
-                            <label>Keywords/Tags</label>
-                            <input type="text" name="keywords" id="add_book_keywords" placeholder="e.g. Philippine History, Revolution">
-                        </div>
+                        <div class="form-group"><label>Quantity *</label><input type="number" name="quantity" min="1" value="1" required></div>
+                        <div class="form-group"><label>Available</label><input type="number" name="available" min="0" value="1"></div>
+                        <div class="form-group"><label>Location</label><input type="text" name="location" placeholder="Shelf A-1"></div>
+                        <div class="form-group"><label>Keywords/Tags</label><input type="text" name="keywords" placeholder="e.g. History, Revolution"></div>
                         <div class="form-group">
                             <label>Cover Image</label>
                             <div class="cover-upload-container">
@@ -1768,10 +1632,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                 <div id="coverPlaceholder" class="cover-placeholder">
                                     <span class="cover-icon">▣</span>
                                     <span>No cover image selected</span>
-                                    <span class="cover-hint">Click to upload</span>
                                 </div>
                                 <div id="coverPreviewContainer" class="cover-preview-container" style="display:none;">
-                                    <img id="coverPreview" class="cover-preview" alt="Cover Preview">
+                                    <img id="coverPreview" class="cover-preview" alt="">
                                     <button type="button" onclick="removeCoverImage()" class="btn-remove-cover">✕</button>
                                 </div>
                                 <input type="hidden" name="cover_image" id="coverImageData" value="">
@@ -1779,7 +1642,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         </div>
                         <div class="modal-actions">
                             <button type="button" onclick="closeModal('addBookModal')" class="btn-cancel">Cancel</button>
-                            <button type="submit" class="btn-confirm" id="addBookSubmitBtn">Add Book</button>
+                            <button type="submit" class="btn-confirm">Add Book</button>
                         </div>
                     </form>
                 </div>
@@ -1790,26 +1653,11 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <h3>Edit Book</h3>
                     <form method="POST" action="admin_dashboard.php?section=books&action=edit_book" enctype="multipart/form-data">
                         <input type="hidden" name="book_id" id="edit_book_id" value="">
-                        <div class="form-group">
-                            <label>Title *</label>
-                            <input type="text" name="title" id="edit_title" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Author *</label>
-                            <input type="text" name="author" id="edit_author" required>
-                        </div>
-                        <div class="form-group">
-                            <label>ISBN</label>
-                            <input type="text" name="isbn" id="edit_isbn">
-                        </div>
-                        <div class="form-group">
-                            <label>Publisher</label>
-                            <input type="text" name="publisher" id="edit_publisher">
-                        </div>
-                        <div class="form-group">
-                            <label>Year Published</label>
-                            <input type="number" name="year_published" id="edit_year" min="1000" max="<?php echo date('Y'); ?>">
-                        </div>
+                        <div class="form-group"><label>Title *</label><input type="text" name="title" id="edit_title" required></div>
+                        <div class="form-group"><label>Author *</label><input type="text" name="author" id="edit_author" required></div>
+                        <div class="form-group"><label>ISBN</label><input type="text" name="isbn" id="edit_isbn"></div>
+                        <div class="form-group"><label>Publisher</label><input type="text" name="publisher" id="edit_publisher"></div>
+                        <div class="form-group"><label>Year Published</label><input type="number" name="year_published" id="edit_year" min="1000" max="<?php echo date('Y'); ?>"></div>
                         <div class="form-group">
                             <label>Category</label>
                             <select name="category_id" id="edit_category">
@@ -1819,18 +1667,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Quantity *</label>
-                            <input type="number" name="quantity" id="edit_quantity" min="1" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Available</label>
-                            <input type="number" name="available" id="edit_available" min="0">
-                        </div>
-                        <div class="form-group">
-                            <label>Location</label>
-                            <input type="text" name="location" id="edit_location">
-                        </div>
+                        <div class="form-group"><label>Quantity *</label><input type="number" name="quantity" id="edit_quantity" min="1" required></div>
+                        <div class="form-group"><label>Available</label><input type="number" name="available" id="edit_available" min="0"></div>
+                        <div class="form-group"><label>Location</label><input type="text" name="location" id="edit_location"></div>
                         <div class="form-group">
                             <label>Cover Image</label>
                             <div class="cover-upload-container">
@@ -1846,10 +1685,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                 <input type="hidden" name="cover_image" id="editCoverImageData" value="">
                             </div>
                         </div>
-                        <div class="form-group">
-                            <label>Description</label>
-                            <textarea name="description" id="edit_description" rows="3"></textarea>
-                        </div>
+                        <div class="form-group"><label>Description</label><textarea name="description" id="edit_description" rows="3"></textarea></div>
                         <div class="modal-actions">
                             <button type="button" onclick="closeModal('editBookModal')" class="btn-cancel">Cancel</button>
                             <button type="submit" class="btn-confirm">Update Book</button>
@@ -1873,15 +1709,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
-                            <tr>
-                                <th>Book</th>
-                                <th>User</th>
-                                <th>User ID</th>
-                                <th>Borrowed</th>
-                                <th>Due Date</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
+                            <tr><th>Book</th><th>User</th><th>User ID</th><th>Borrowed</th><th>Due Date</th><th>Status</th><th>Action</th></tr>
                         </thead>
                         <tbody>
                             <?php if (!empty($borrowings)): ?>
@@ -1912,12 +1740,12 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
 
             <div class="modal-overlay" id="returnConfirmModal">
                 <div class="modal" style="max-width:460px;">
-                    <div class="return-confirm-icon">📚</div>
-                    <div class="return-confirm-title">Return this book?</div>
-                    <div class="return-confirm-sub">Please confirm that the student is returning the physical book. This action will mark the borrowing as returned.</div>
-                    <div class="return-book-preview">
-                        <div class="rb-title" id="returnBookTitle">Book Title</div>
-                        <div class="rb-meta" id="returnBookMeta">by Student • Due: —</div>
+                    <div style="text-align:center;font-size:48px;margin-bottom:16px;">📚</div>
+                    <h3 style="text-align:center;">Return this book?</h3>
+                    <p style="text-align:center;color:#8a7a8a;margin-bottom:20px;">Please confirm that the student is returning the physical book.</p>
+                    <div style="background:#faf5fa;border-radius:10px;padding:14px 18px;border:1px solid #f0e0ee;margin-bottom:20px;">
+                        <div id="returnBookTitle" style="font-weight:600;">Book Title</div>
+                        <div id="returnBookMeta" style="font-size:13px;color:#8a7a8a;">by Student • Due: —</div>
                     </div>
                     <form method="GET" action="admin_dashboard.php" id="returnConfirmForm">
                         <input type="hidden" name="section" value="borrowings">
@@ -1944,15 +1772,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <div class="table-container">
                     <table class="data-table">
                         <thead>
-                            <tr>
-                                <th>Student</th>
-                                <th>Student ID</th>
-                                <th>Amount</th>
-                                <th>Reason</th>
-                                <th>Date</th>
-                                <th>Status</th>
-                                <th>Action</th>
-                            </tr>
+                            <tr><th>Student</th><th>Student ID</th><th>Amount</th><th>Reason</th><th>Date</th><th>Status</th><th>Action</th></tr>
                         </thead>
                         <tbody>
                             <?php if (!empty($fines)): ?>
@@ -1999,25 +1819,20 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <h3>Add Fine to Student</h3>
                     <form method="POST" action="admin_dashboard.php?section=fines&action=add_fine">
                         <div class="form-group">
-                            <label>Student <span style="color:#8a3a2a;">*</span></label>
+                            <label>Student *</label>
                             <select name="student_id" required>
                                 <option value="">Select Student</option>
                                 <?php foreach ($students as $s): 
                                     $studentName = $s['users']['full_name'] ?? 'Unknown';
                                     $studentIdVal = $s['student_id'] ?? 'N/A';
                                 ?>
-                                    <option value="<?php echo $s['id']; ?>">
-                                        <?php echo htmlspecialchars($studentName . ' (' . $studentIdVal . ')'); ?>
-                                    </option>
+                                    <option value="<?php echo $s['id']; ?>"><?php echo htmlspecialchars($studentName . ' (' . $studentIdVal . ')'); ?></option>
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <div class="form-group"><label>Amount (₱) *</label><input type="number" name="amount" min="1" step="0.50" required></div>
                         <div class="form-group">
-                            <label>Amount (₱) <span style="color:#8a3a2a;">*</span></label>
-                            <input type="number" name="amount" min="1" step="0.50" placeholder="Enter fine amount" required>
-                        </div>
-                        <div class="form-group">
-                            <label>Reason <span style="color:#8a3a2a;">*</span></label>
+                            <label>Reason *</label>
                             <select name="reason" required>
                                 <option value="Late Return">Late Return</option>
                                 <option value="Lost Book">Lost Book</option>
@@ -2026,10 +1841,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                 <option value="Other">Other</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>Notes (Optional)</label>
-                            <textarea name="notes" rows="2" placeholder="Additional notes about this fine"></textarea>
-                        </div>
+                        <div class="form-group"><label>Notes (Optional)</label><textarea name="notes" rows="2"></textarea></div>
                         <div class="modal-actions">
                             <button type="button" onclick="closeModal('addFineModal')" class="btn-cancel">Cancel</button>
                             <button type="submit" class="btn-confirm">Add Fine</button>
@@ -2038,29 +1850,16 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 </div>
             </div>
 
-            <!-- ===== PAY FINE CONFIRMATION MODAL ===== -->
             <div class="modal-overlay" id="payFineModal">
                 <div class="modal" style="max-width:460px;">
-                    <div class="pay-confirm-icon">₱</div>
-                    <div class="pay-confirm-title">Confirm Fine Payment</div>
-                    <div class="pay-confirm-sub">Please confirm that the student has paid this fine. This action will mark the fine as paid and cannot be undone.</div>
-                    <div class="pay-detail-card">
-                        <div class="pay-detail-row">
-                            <span class="pay-detail-label">Student</span>
-                            <span class="pay-detail-value" id="payStudentName">—</span>
-                        </div>
-                        <div class="pay-detail-row">
-                            <span class="pay-detail-label">Student ID</span>
-                            <span class="pay-detail-value" id="payStudentId">—</span>
-                        </div>
-                        <div class="pay-detail-row">
-                            <span class="pay-detail-label">Reason</span>
-                            <span class="pay-detail-value" id="payReason">—</span>
-                        </div>
-                        <div class="pay-detail-row">
-                            <span class="pay-detail-label">Amount Due</span>
-                            <span class="pay-detail-value amount" id="payAmount">₱0.00</span>
-                        </div>
+                    <div style="text-align:center;font-size:48px;margin-bottom:16px;">₱</div>
+                    <h3 style="text-align:center;">Confirm Fine Payment</h3>
+                    <p style="text-align:center;color:#8a7a8a;margin-bottom:20px;">This will mark the fine as paid and cannot be undone.</p>
+                    <div style="background:#faf5fa;border-radius:10px;padding:14px 18px;border:1px solid #f0e0ee;margin-bottom:20px;">
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:#8a7a8a;">Student</span><span id="payStudentName" style="font-weight:500;">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:#8a7a8a;">Student ID</span><span id="payStudentId" style="font-weight:500;">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:#8a7a8a;">Reason</span><span id="payReason" style="font-weight:500;">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #f0e0ee;margin-top:6px;padding-top:12px;"><span style="color:#8a7a8a;">Amount Due</span><span id="payAmount" style="font-weight:700;color:#b40f7d;font-size:16px;">₱0.00</span></div>
                     </div>
                     <form method="GET" action="admin_dashboard.php" id="payFineForm">
                         <input type="hidden" name="section" value="fines">
@@ -2097,9 +1896,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 </div>
                 <div class="table-container">
                     <table class="data-table">
-                        <thead>
-                            <tr><th>ID</th><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
-                        </thead>
+                        <thead><tr><th>ID</th><th>Name</th><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr></thead>
                         <tbody>
                             <?php if (!empty($filteredUsers)): ?>
                                 <?php foreach ($filteredUsers as $u): ?>
@@ -2186,40 +1983,19 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                     $isFulfilled = ($r['status'] ?? '') === 'Fulfilled';
                                 ?>
                                     <tr>
-                                        <td>
-                                            <strong><?php echo htmlspecialchars($r['full_name'] ?? 'N/A'); ?></strong>
-                                            <br><small style="color:#8a7a8a;">ID: <?php echo htmlspecialchars($r['student_id'] ?? 'N/A'); ?></small>
-                                        </td>
-                                        <td>
-                                            <strong><?php echo htmlspecialchars($r['book_title'] ?? 'N/A'); ?></strong>
-                                            <br><small style="color:#8a7a8a;">by <?php echo htmlspecialchars($r['book_author'] ?? 'N/A'); ?></small>
-                                        </td>
+                                        <td><strong><?php echo htmlspecialchars($r['full_name'] ?? 'N/A'); ?></strong><br><small style="color:#8a7a8a;">ID: <?php echo htmlspecialchars($r['student_id'] ?? 'N/A'); ?></small></td>
+                                        <td><strong><?php echo htmlspecialchars($r['book_title'] ?? 'N/A'); ?></strong><br><small style="color:#8a7a8a;">by <?php echo htmlspecialchars($r['book_author'] ?? 'N/A'); ?></small></td>
                                         <td><span class="status-badge status-pending"><?php echo ucfirst($r['request_type'] ?? 'borrow'); ?></span></td>
-                                        <td>
-                                            <?php echo htmlspecialchars($r['year_level'] ?? 'N/A'); ?>
-                                            <br><small style="color:#8a7a8a;"><?php echo htmlspecialchars($r['section'] ?? 'N/A'); ?></small>
-                                        </td>
-                                        <td>
-                                            <div style="max-width:150px;font-size:13px;color:#6a5a6a;word-wrap:break-word;">
-                                                <?php echo htmlspecialchars(substr($r['purpose'] ?? '', 0, 50)) . (strlen($r['purpose'] ?? '') > 50 ? '...' : ''); ?>
-                                            </div>
-                                        </td>
+                                        <td><?php echo htmlspecialchars($r['year_level'] ?? 'N/A'); ?><br><small style="color:#8a7a8a;"><?php echo htmlspecialchars($r['section'] ?? 'N/A'); ?></small></td>
+                                        <td><div style="max-width:150px;font-size:13px;color:#6a5a6a;"><?php echo htmlspecialchars(substr($r['purpose'] ?? '', 0, 50)) . (strlen($r['purpose'] ?? '') > 50 ? '...' : ''); ?></div></td>
                                         <td><?php echo date('M d, Y', strtotime($r['created_at'] ?? 'now')); ?></td>
-                                        <td>
-                                            <span class="status-badge <?php echo $isPending ? 'status-pending' : ($isApproved ? 'status-approved' : ($isRejected ? 'status-rejected' : 'status-fulfilled')); ?>">
-                                                <?php echo $r['status'] ?? 'Pending'; ?>
-                                            </span>
-                                        </td>
+                                        <td><span class="status-badge <?php echo $isPending ? 'status-pending' : ($isApproved ? 'status-approved' : ($isRejected ? 'status-rejected' : 'status-fulfilled')); ?>"><?php echo $r['status'] ?? 'Pending'; ?></span></td>
                                         <td>
                                             <?php if ($isPending): ?>
                                                 <button class="btn-edit" onclick="openApproveModal('<?php echo $r['id']; ?>', '<?php echo addslashes($r['full_name']); ?>', '<?php echo addslashes($r['book_title']); ?>')">Approve</button>
                                                 <button class="btn-delete" onclick="openRejectModal('<?php echo $r['id']; ?>', '<?php echo addslashes($r['full_name']); ?>', '<?php echo addslashes($r['book_title']); ?>')">Reject</button>
-                                            <?php elseif ($isApproved): ?>
-                                                <span style="color:#2a4a3a;font-size:12px;">✓ Approved</span>
-                                            <?php elseif ($isRejected): ?>
-                                                <span style="color:#8a3a2a;font-size:12px;">✗ Rejected</span>
-                                            <?php elseif ($isFulfilled): ?>
-                                                <span style="color:#4a3a2e;font-size:12px;">✓ Fulfilled</span>
+                                            <?php else: ?>
+                                                <span style="color:#b0a8a0;font-size:12px;"><?php echo $r['status']; ?></span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -2236,34 +2012,179 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <?php endif; ?>
             </div>
 
+            <div class="modal-overlay" id="approveModal">
+                <div class="modal">
+                    <h3>✅ Approve Request</h3>
+                    <div style="background:#f0e8ee;border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #b40f7d;">
+                        <p style="margin:0;font-size:14px;"><strong>Student:</strong> <span id="approveStudentName">—</span></p>
+                        <p style="margin:4px 0 0;font-size:14px;"><strong>Book:</strong> <span id="approveBookTitle">—</span></p>
+                    </div>
+                    <form method="GET" action="admin_dashboard.php">
+                        <input type="hidden" name="section" value="requests">
+                        <input type="hidden" name="action" value="approve">
+                        <input type="hidden" name="id" id="approveRequestId" value="">
+                        <div class="form-group"><label>Notes (Optional)</label><textarea id="approveNotes" name="notes" rows="3"></textarea></div>
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeModal('approveModal')" class="btn-cancel">Cancel</button>
+                            <button type="submit" class="btn-confirm" style="background:#2a4a3a;">Confirm Approve</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <div class="modal-overlay" id="rejectModal">
+                <div class="modal">
+                    <h3>❌ Reject Request</h3>
+                    <div style="background:#f0e0e8;border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #d460b8;">
+                        <p style="margin:0;font-size:14px;"><strong>Student:</strong> <span id="rejectStudentName">—</span></p>
+                        <p style="margin:4px 0 0;font-size:14px;"><strong>Book:</strong> <span id="rejectBookTitle">—</span></p>
+                    </div>
+                    <form method="GET" action="admin_dashboard.php">
+                        <input type="hidden" name="section" value="requests">
+                        <input type="hidden" name="action" value="reject">
+                        <input type="hidden" name="id" id="rejectRequestId" value="">
+                        <div class="form-group"><label>Reason (Optional)</label><textarea id="rejectNotes" name="notes" rows="3"></textarea></div>
+                        <div class="modal-actions">
+                            <button type="button" onclick="closeModal('rejectModal')" class="btn-cancel">Cancel</button>
+                            <button type="submit" class="btn-confirm" style="background:#8a2a5a;">Confirm Reject</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <?php elseif ($section === 'reservations'): ?>
+            <div class="reservation-management">
+                <div class="section-header">
+                    <h1>Reservations Management</h1>
+                    <span class="count-badge">Total: <?php echo count($reservations); ?> reservations</span>
+                </div>
+
+                <?php if (!empty($reservations)): ?>
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr><th>Book</th><th>Student</th><th>Student ID</th><th>Reserved</th><th>Expiry</th><th>Status</th></tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($reservations as $r): 
+                                    $bookTitle = isset($r['books']['title']) ? $r['books']['title'] : 'Unknown';
+                                    $studentName = 'Unknown';
+                                    $studentDisplayId = 'N/A';
+                                    if (isset($r['user_id'])) {
+                                        $userRecord = supabaseRequest('users?select=full_name,user_id&id=eq.' . $r['user_id']);
+                                        if (!empty($userRecord)) {
+                                            $studentName = $userRecord[0]['full_name'] ?? 'Unknown';
+                                            $studentDisplayId = $userRecord[0]['user_id'] ?? 'N/A';
+                                        }
+                                    }
+                                ?>
+                                    <tr>
+                                        <td><strong><?php echo htmlspecialchars($bookTitle); ?></strong></td>
+                                        <td><?php echo htmlspecialchars($studentName); ?></td>
+                                        <td><?php echo htmlspecialchars($studentDisplayId); ?></td>
+                                        <td><?php echo date('M d, Y', strtotime($r['reservation_date'] ?? 'now')); ?></td>
+                                        <td><?php echo date('M d, Y', strtotime($r['expiry_date'] ?? 'now')); ?></td>
+                                        <td><span class="status-badge status-<?php echo strtolower($r['status'] ?? 'pending'); ?>"><?php echo $r['status'] ?? 'Pending'; ?></span></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <div style="background:#ffffff;border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;">
+                        <span style="font-size:56px;display:block;margin-bottom:16px;opacity:0.4;">⏱</span>
+                        <h3 style="color:#1a1a2e;margin-bottom:8px;">No Reservations</h3>
+                        <p style="color:#8a7a8a;font-size:15px;">No book reservations have been made yet.</p>
+                    </div>
+                <?php endif; ?>
+            </div>
+
+            <?php elseif ($section === 'search'): ?>
+            <!-- ===== AI BOOK SEARCH - SAME AS STUDENT ===== -->
+            <div class="book-management">
+                <div class="section-header">
+                    <h1>Search Books</h1>
+                    <div class="search-info">
+                        <span class="search-type-badge" id="searchTypeBadge" style="display:none;">🧠 AI Search</span>
+                        <span class="count-badge">Books: <strong id="resultCount"><?php echo count($books); ?></strong></span>
+                        <span id="aiStatus" style="font-size:12px;color:#8a7a8a;">🤖 Initializing AI...</span>
+                    </div>
+                </div>
+
+                <div class="search-bar">
+                    <div class="search-input-wrapper">
+                        <span class="search-icon">⌕</span>
+                        <input type="text" id="searchInput" 
+                               placeholder="Search by title, author, or describe what you need..."
+                               value="<?php echo htmlspecialchars($searchQuery); ?>"
+                               onkeydown="if(event.key==='Enter'){event.preventDefault(); performSearch();}">
+                        <button class="clear-btn" id="clearSearchBtn" onclick="clearSearch()">✕</button>
+                        <div class="predictive-results" id="predictiveResults"></div>
+                    </div>
+                    <button onclick="performSearch()" style="padding:12px 24px;background:#1a1a2e;color:#f0e8e8;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;">Search</button>
+                </div>
+
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
+                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('programming')">Programming</span>
+                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('history')">History</span>
+                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('science')">Science</span>
+                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('psychology')">Psychology</span>
+                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('fiction')">Fiction</span>
+                </div>
+
+                <div class="book-grid" id="bookGrid">
+                    <?php foreach ($books as $book): 
+                        $categoryName = isset($book['categories']['name']) ? $book['categories']['name'] : (isset($book['category_id']) && isset($catMap[$book['category_id']]) ? $catMap[$book['category_id']] : 'Uncategorized');
+                        $coverImage = $book['cover_image'] ?? '';
+                        $hasCover = hasValidCoverImage($coverImage);
+                        $available = $book['available'] ?? 0;
+                        $bookId = $book['id'] ?? uniqid();
+                        $title = $book['title'] ?? 'Unknown';
+                        $author = $book['author'] ?? 'Unknown';
+                    ?>
+                        <div class="book-card" data-book-id="<?php echo $bookId; ?>">
+                            <div class="book-cover-wrapper">
+                                <?php if ($hasCover): ?>
+                                    <img src="<?php echo htmlspecialchars($coverImage); ?>" alt="<?php echo htmlspecialchars($title); ?>">
+                                <?php else: ?>
+                                    <div class="cover-placeholder" style="background-color:<?php echo getPlaceholderColor($bookId); ?>;">
+                                        <span class="initial"><?php echo strtoupper(substr($title, 0, 1)); ?></span>
+                                    </div>
+                                <?php endif; ?>
+                                <span class="availability-badge <?php echo $available <= 0 ? 'none' : ($available <= 2 ? 'low' : ''); ?>">
+                                    <?php echo $available <= 0 ? 'Not Available' : ($available <= 2 ? 'Low Stock' : 'Available'); ?>
+                                </span>
+                            </div>
+                            <div class="book-info">
+                                <h3 class="book-title"><?php echo htmlspecialchars($title); ?></h3>
+                                <p class="book-author">by <?php echo htmlspecialchars($author); ?></p>
+                                <span class="book-category"><?php echo htmlspecialchars($categoryName); ?></span>
+                                <div class="book-meta">
+                                    <span class="availability"><strong><?php echo $available; ?></strong> / <?php echo $book['quantity'] ?? 0; ?> available</span>
+                                    <div class="book-actions">
+                                        <button class="btn-edit" onclick="openEditBookModal('<?php echo $bookId; ?>', '<?php echo addslashes($title); ?>', '<?php echo addslashes($author); ?>', '<?php echo addslashes($book['isbn'] ?? ''); ?>', '<?php echo addslashes($book['publisher'] ?? ''); ?>', '<?php echo $book['year_published'] ?? ''; ?>', '<?php echo $book['category_id'] ?? ''; ?>', '<?php echo $book['quantity'] ?? 1; ?>', '<?php echo $available; ?>', '<?php echo addslashes($book['location'] ?? ''); ?>', '<?php echo addslashes($book['description'] ?? ''); ?>', '<?php echo addslashes($coverImage); ?>')">Edit</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+
             <?php elseif ($section === 'reports'): ?>
             <div class="reports-content">
                 <h1 style="margin-bottom:20px;">Reports & Analytics</h1>
-                <div class="stats-grid-reports">
-                    <div class="stat-card-report">
-                        <h3><?php echo $stats['totalBorrowings']; ?></h3>
-                        <p>Total Borrowings</p>
-                    </div>
-                    <div class="stat-card-report">
-                        <h3><?php echo $stats['totalOverdue']; ?></h3>
-                        <p>Overdue Books</p>
-                    </div>
-                    <div class="stat-card-report">
-                        <h3>₱<?php echo number_format($stats['totalFines'], 2); ?></h3>
-                        <p>Total Fines</p>
-                    </div>
-                    <div class="stat-card-report">
-                        <h3><?php echo $stats['paidFines']; ?></h3>
-                        <p>Paid Fines</p>
-                    </div>
+                <div class="stats-grid-reports" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:28px;">
+                    <div style="background:#ffffff;padding:20px 24px;border-radius:12px;border:1px solid #f0e0ee;"><h3 style="font-size:28px;margin:0;"><?php echo $stats['totalBorrowings']; ?></h3><p style="margin:4px 0 0;color:#8a7a8a;">Total Borrowings</p></div>
+                    <div style="background:#ffffff;padding:20px 24px;border-radius:12px;border:1px solid #f0e0ee;"><h3 style="font-size:28px;margin:0;"><?php echo $stats['totalOverdue']; ?></h3><p style="margin:4px 0 0;color:#8a7a8a;">Overdue Books</p></div>
+                    <div style="background:#ffffff;padding:20px 24px;border-radius:12px;border:1px solid #f0e0ee;"><h3 style="font-size:28px;margin:0;">₱<?php echo number_format($stats['totalFines'], 2); ?></h3><p style="margin:4px 0 0;color:#8a7a8a;">Total Fines</p></div>
+                    <div style="background:#ffffff;padding:20px 24px;border-radius:12px;border:1px solid #f0e0ee;"><h3 style="font-size:28px;margin:0;"><?php echo $stats['paidFines']; ?></h3><p style="margin:4px 0 0;color:#8a7a8a;">Paid Fines</p></div>
                 </div>
                 <?php if (!empty($borrowings)): ?>
                 <div class="table-container" style="margin-bottom:20px;">
                     <h3 style="padding:15px 20px;margin:0;color:#1a1a2e;font-weight:600;">Recent Borrowings</h3>
                     <table class="data-table">
-                        <thead>
-                            <tr><th>Book</th><th>User</th><th>Borrow Date</th><th>Due Date</th><th>Status</th></tr>
-                        </thead>
+                        <thead><tr><th>Book</th><th>User</th><th>Borrow Date</th><th>Due Date</th><th>Status</th></tr></thead>
                         <tbody>
                             <?php foreach (array_slice($borrowings, 0, 10) as $b): ?>
                                 <tr>
@@ -2278,7 +2199,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     </table>
                 </div>
                 <?php endif; ?>
-                <div class="export-actions">
+                <div class="export-actions" style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
                     <a href="admin_dashboard.php?section=reports&action=export&format=excel" class="btn-export">Export Borrowings Excel</a>
                 </div>
             </div>
@@ -2290,23 +2211,11 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <h2 style="margin:0 0 16px 0;color:#1a1a2e;font-size:18px;font-weight:600;">Fine Settings</h2>
                     <form method="POST" action="admin_dashboard.php?section=settings">
                         <input type="hidden" name="action" value="update_fines">
-                        <div class="settings-grid">
-                            <div class="setting-item">
-                                <label>Fine per Day (₱)</label>
-                                <input type="number" name="fine_per_day" value="<?php echo $fineSettingsData['fine_per_day'] ?? 50; ?>" step="0.50" min="0">
-                            </div>
-                            <div class="setting-item">
-                                <label>Lost Book Fee (₱)</label>
-                                <input type="number" name="lost_book_fee" value="<?php echo $fineSettingsData['lost_book_fee'] ?? 500; ?>" step="50" min="0">
-                            </div>
-                            <div class="setting-item">
-                                <label>Damaged Book Fee (₱)</label>
-                                <input type="number" name="damaged_book_fee" value="<?php echo $fineSettingsData['damaged_book_fee'] ?? 200; ?>" step="50" min="0">
-                            </div>
-                            <div class="setting-item">
-                                <label>Grace Period (days)</label>
-                                <input type="number" name="grace_period" value="<?php echo $fineSettingsData['grace_period'] ?? 0; ?>" min="0">
-                            </div>
+                        <div class="settings-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
+                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Fine per Day (₱)</label><input type="number" name="fine_per_day" value="<?php echo $fineSettingsData['fine_per_day'] ?? 50; ?>" step="0.50" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
+                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Lost Book Fee (₱)</label><input type="number" name="lost_book_fee" value="<?php echo $fineSettingsData['lost_book_fee'] ?? 500; ?>" step="50" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
+                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Damaged Book Fee (₱)</label><input type="number" name="damaged_book_fee" value="<?php echo $fineSettingsData['damaged_book_fee'] ?? 200; ?>" step="50" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
+                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Grace Period (days)</label><input type="number" name="grace_period" value="<?php echo $fineSettingsData['grace_period'] ?? 0; ?>" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
                         </div>
                         <button type="submit" class="btn-save" style="margin-top:16px;">Save Fine Settings</button>
                     </form>
@@ -2315,7 +2224,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <h2 style="margin:0 0 16px 0;color:#1a1a2e;font-size:18px;font-weight:600;">Academic Years</h2>
                     <?php if (!empty($academicYears)): ?>
                         <?php foreach ($academicYears as $year): ?>
-                            <div class="academic-year-item">
+                            <div style="display:flex;gap:20px;padding:12px 0;border-bottom:1px solid #f5eef5;flex-wrap:wrap;align-items:center;">
                                 <span><?php echo htmlspecialchars($year['year_name'] ?? ''); ?></span>
                                 <span><?php echo htmlspecialchars($year['start_date'] ?? ''); ?> - <?php echo htmlspecialchars($year['end_date'] ?? ''); ?></span>
                                 <span style="color:#b40f7d;font-weight:600;"><?php echo ($year['is_current'] ?? false) ? 'Current' : ''; ?></span>
@@ -2330,61 +2239,337 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         </div>
     </div>
 
-    <!-- APPROVE MODAL -->
-    <div class="modal-overlay" id="approveModal">
-        <div class="modal">
-            <h3>✅ Approve Request</h3>
-            <div style="background:#f0e8ee;border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #b40f7d;">
-                <p style="margin:0;font-size:14px;"><strong>Student:</strong> <span id="approveStudentName">Loading...</span></p>
-                <p style="margin:4px 0 0;font-size:14px;"><strong>Book:</strong> <span id="approveBookTitle">Loading...</span></p>
-            </div>
-            <form method="GET" action="admin_dashboard.php">
-                <input type="hidden" name="section" value="requests">
-                <input type="hidden" name="action" value="approve">
-                <input type="hidden" name="id" id="approveRequestId" value="">
-                <div class="form-group">
-                    <label>Verification Notes (Optional)</label>
-                    <textarea id="approveNotes" name="notes" rows="3"></textarea>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" onclick="closeModal('approveModal')" class="btn-cancel">Cancel</button>
-                    <button type="submit" class="btn-confirm" style="background:#2a4a3a;">Confirm Approve</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- REJECT MODAL -->
-    <div class="modal-overlay" id="rejectModal">
-        <div class="modal">
-            <h3>❌ Reject Request</h3>
-            <div style="background:#f0e0e8;border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #d460b8;">
-                <p style="margin:0;font-size:14px;"><strong>Student:</strong> <span id="rejectStudentName">Loading...</span></p>
-                <p style="margin:4px 0 0;font-size:14px;"><strong>Book:</strong> <span id="rejectBookTitle">Loading...</span></p>
-            </div>
-            <form method="GET" action="admin_dashboard.php">
-                <input type="hidden" name="section" value="requests">
-                <input type="hidden" name="action" value="reject">
-                <input type="hidden" name="id" id="rejectRequestId" value="">
-                <div class="form-group">
-                    <label>Rejection Reason (Optional)</label>
-                    <textarea id="rejectNotes" name="notes" rows="3"></textarea>
-                </div>
-                <div class="modal-actions">
-                    <button type="button" onclick="closeModal('rejectModal')" class="btn-cancel">Cancel</button>
-                    <button type="submit" class="btn-confirm" style="background:#8a2a5a;">Confirm Reject</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
     <script>
+        // ===== BOOK DATA FOR AI SEARCH =====
+        const allBooks = <?php echo json_encode($books); ?>;
+        const userId = '<?php echo $_SESSION['user_id']; ?>';
+        const userGradeLevel = 'Admin';
+        const userSubjects = [];
+        const userHistory = [];
+
         let currentCoverImageData = '';
         let editCoverImageData = '';
         let searchTimeout;
         let userSearchTimeout;
         let requestSearchTimeout;
+        let predictionTimeout = null;
+        let searchSession = { queries: [], clicks: [], abandoned: [] };
 
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function getPlaceholderColor(id) {
+            const colors = ['#b40f7d', '#8a0a5f', '#cf1fa9', '#d460b8', '#e8a0d0', '#f0c8e0', '#f5e0ee', '#faf0f5'];
+            let hash = 0;
+            for (let i = 0; i < String(id).length; i++) {
+                hash = ((hash << 5) - hash) + String(id).charCodeAt(i);
+                hash |= 0;
+            }
+            return colors[Math.abs(hash) % colors.length];
+        }
+
+        // ===== AI SEARCH =====
+        async function performSearch() {
+            const searchInput = document.getElementById('searchInput');
+            if (!searchInput) return;
+            
+            const query = searchInput.value.trim();
+            if (!query) {
+                window.location.href = 'admin_dashboard.php?section=search';
+                return;
+            }
+
+            const grid = document.getElementById('bookGrid');
+            const badge = document.getElementById('searchTypeBadge');
+            const aiStatus = document.getElementById('aiStatus');
+
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;"><div style="width:40px;height:40px;border:3px solid #f0e8ee;border-top-color:#b40f7d;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div><p style="color:#8a7a8a;">AI is searching...</p></div>';
+            
+            badge.style.display = 'inline-block';
+            badge.textContent = '🧠 Searching...';
+            aiStatus.textContent = '🤖 AI analyzing...';
+
+            try {
+                let results;
+                if (window.firebaseServices && window.firebaseServices.isReady && window.aiFunctions && window.aiFunctions.semanticSearch) {
+                    results = await window.aiFunctions.semanticSearch(query, allBooks, 20);
+                    aiStatus.innerHTML = '<span style="color:#34a853;">●</span> AI Online';
+                    badge.textContent = '🧠 AI Search';
+                } else {
+                    results = basicSearchFallback(query, allBooks);
+                    aiStatus.textContent = '📝 Basic Search';
+                    badge.textContent = '📝 Basic';
+                }
+                
+                renderSearchResults(results);
+                document.getElementById('resultCount').textContent = results.length;
+
+                searchSession.queries.push(query);
+                searchSession.clicks.push(0);
+                
+                if (searchSession.queries.length >= 3 && searchSession.queries.length % 3 === 0 && window.firebaseServices && window.firebaseServices.isReady && window.aiFunctions && window.aiFunctions.analyzeSession) {
+                    const analysis = await window.aiFunctions.analyzeSession(
+                        searchSession.queries,
+                        searchSession.clicks,
+                        searchSession.abandoned
+                    );
+                    if (analysis.frustration_detected && analysis.frustration_score > 50) {
+                        showFrustrationPopup(analysis);
+                    }
+                }
+            } catch (error) {
+                console.error('Search error:', error);
+                const results = basicSearchFallback(query, allBooks);
+                renderSearchResults(results);
+                document.getElementById('resultCount').textContent = results.length;
+                badge.textContent = '📝 Basic';
+            }
+        }
+
+        function basicSearchFallback(query, books) {
+            const q = query.toLowerCase();
+            const words = q.split(' ').filter(w => w.length > 2);
+
+            return books.map(book => {
+                let score = 0;
+                const title = (book.title || '').toLowerCase();
+                const author = (book.author || '').toLowerCase();
+                const desc = (book.description || '').toLowerCase();
+                const category = (book.categories?.name || book.category || '').toLowerCase();
+
+                if (title.includes(q)) score += 50;
+                if (author.includes(q)) score += 30;
+                if (desc.includes(q)) score += 20;
+                if (category.includes(q)) score += 15;
+                
+                words.forEach(w => {
+                    if (title.includes(w)) score += 10;
+                    if (author.includes(w)) score += 5;
+                    if (desc.includes(w)) score += 3;
+                    if (category.includes(w)) score += 2;
+                });
+
+                return { ...book, relevance: Math.min(score, 100) };
+            })
+            .filter(b => b.relevance > 0)
+            .sort((a, b) => b.relevance - a.relevance);
+        }
+
+        function renderSearchResults(books) {
+            const grid = document.getElementById('bookGrid');
+            if (!grid) return;
+
+            if (books.length === 0) {
+                grid.innerHTML = '<div style="grid-column:1/-1;background:#fff;border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;"><h3>No books found</h3><p style="color:#8a7a8a;margin-top:8px;">Try different keywords</p></div>';
+                return;
+            }
+
+            grid.innerHTML = books.map(book => {
+                const title = book.title || 'Unknown';
+                const author = book.author || 'Unknown';
+                const category = (book.categories && book.categories.name) || book.category || 'Uncategorized';
+                const available = book.available || 0;
+                const relevance = Math.round(book.relevance || 0);
+                const bookId = book.id;
+                const coverImage = book.cover_image || '';
+                const hasCover = coverImage && coverImage.length > 100;
+
+                const safeTitle = title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeAuthor = author.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeIsbn = (book.isbn || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safePublisher = (book.publisher || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeLocation = (book.location || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
+                const safeDescription = (book.description || '').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
+
+                return `
+                    <div class="book-card" data-book-id="${bookId}">
+                        <div class="book-cover-wrapper">
+                            ${hasCover ? `<img src="${coverImage}" alt="${escapeHtml(title)}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : ''}
+                            <div class="cover-placeholder" style="${hasCover ? 'display:none;' : ''}background-color:${getPlaceholderColor(bookId)};">
+                                <span class="initial">${title.charAt(0).toUpperCase()}</span>
+                            </div>
+                            <span class="availability-badge ${available <= 0 ? 'none' : (available <= 2 ? 'low' : '')}">
+                                ${available <= 0 ? 'Not Available' : (available <= 2 ? 'Low Stock' : 'Available')}
+                            </span>
+                        </div>
+                        <div class="book-info">
+                            <h3 class="book-title">${escapeHtml(title)}</h3>
+                            <p class="book-author">by ${escapeHtml(author)}</p>
+                            <span class="book-category">${escapeHtml(category)}</span>
+                            ${relevance > 0 ? `<span class="relevance-score">AI Match: ${relevance}%</span>` : ''}
+                            <div class="book-meta">
+                                <span class="availability"><strong>${available}</strong> / ${book.quantity || 0} available</span>
+                                <div class="book-actions">
+                                    <button class="btn-edit" onclick="openEditBookModal('${bookId}', '${safeTitle}', '${safeAuthor}', '${safeIsbn}', '${safePublisher}', '${book.year_published || ''}', '${book.category_id || ''}', '${book.quantity || 1}', '${available}', '${safeLocation}', '${safeDescription}', '${coverImage}')">Edit</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function quickSearch(query) {
+            document.getElementById('searchInput').value = query;
+            performSearch();
+        }
+
+        function clearSearch() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('clearSearchBtn').classList.remove('visible');
+            window.location.href = 'admin_dashboard.php?section=search';
+        }
+
+        // ===== PREDICTIVE SEARCH =====
+        document.addEventListener('DOMContentLoaded', function() {
+            const searchInput = document.getElementById('searchInput');
+            const clearBtn = document.getElementById('clearSearchBtn');
+
+            if (searchInput) {
+                searchInput.addEventListener('input', function() {
+                    const query = this.value.trim();
+                    if (query.length > 0) {
+                        clearBtn.classList.add('visible');
+                    } else {
+                        clearBtn.classList.remove('visible');
+                        hidePredictions();
+                    }
+
+                    if (query.length >= 2) {
+                        clearTimeout(predictionTimeout);
+                        predictionTimeout = setTimeout(() => getPredictions(query), 400);
+                    } else {
+                        hidePredictions();
+                    }
+                });
+            }
+        });
+
+        async function getPredictions(query) {
+            const container = document.getElementById('predictiveResults');
+            if (!container) return;
+
+            // Fallback to local prediction if AI is not ready
+            if (!window.firebaseServices || !window.firebaseServices.isReady || !window.aiFunctions || !window.aiFunctions.predictSearch) {
+                // Local fallback prediction
+                const localPredictions = allBooks
+                    .filter(b => (b.title || '').toLowerCase().includes(query.toLowerCase()) || 
+                                 (b.author || '').toLowerCase().includes(query.toLowerCase()))
+                    .slice(0, 5)
+                    .map(b => ({
+                        title: b.title,
+                        author: b.author,
+                        category: (b.categories && b.categories.name) || b.category || 'General',
+                        prediction_score: 80
+                    }));
+                
+                if (localPredictions.length > 0) {
+                    container.innerHTML = localPredictions.map(p => `
+                        <div class="predictive-item" onclick="selectPrediction('${escapeHtml(p.title).replace(/'/g, "\\'")}')">
+                            <span class="pred-score">${Math.round(p.prediction_score || 0)}%</span>
+                            <div class="pred-title">${escapeHtml(p.title)}</div>
+                            <div class="pred-author">by ${escapeHtml(p.author || 'Unknown')}</div>
+                            <span class="pred-badge">🎯 ${escapeHtml(p.category || 'General')}</span>
+                        </div>
+                    `).join('');
+                    container.classList.add('visible');
+                }
+                return;
+            }
+
+            container.innerHTML = '<div class="loading-predictions"><div class="spinner"></div> Predicting...</div>';
+            container.classList.add('visible');
+
+            try {
+                const predictions = await window.aiFunctions.predictSearch(
+                    query,
+                    userGradeLevel,
+                    userSubjects,
+                    userHistory
+                );
+
+                if (predictions && predictions.length > 0) {
+                    container.innerHTML = predictions.map(p => `
+                        <div class="predictive-item" onclick="selectPrediction('${escapeHtml(p.title).replace(/'/g, "\\'")}')">
+                            <span class="pred-score">${Math.round(p.prediction_score || 0)}%</span>
+                            <div class="pred-title">${escapeHtml(p.title)}</div>
+                            <div class="pred-author">by ${escapeHtml(p.author || 'Unknown')}</div>
+                            <span class="pred-badge">🎯 ${escapeHtml(p.category || 'General')}</span>
+                        </div>
+                    `).join('');
+                } else {
+                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#8a7a8a;">Keep typing...</div>';
+                }
+            } catch (error) {
+                console.error('Prediction error:', error);
+                container.innerHTML = '<div style="padding:16px;text-align:center;color:#8a7a8a;">Prediction unavailable</div>';
+            }
+        }
+
+        function selectPrediction(title) {
+            document.getElementById('searchInput').value = title;
+            hidePredictions();
+            performSearch();
+        }
+
+        function hidePredictions() {
+            const container = document.getElementById('predictiveResults');
+            if (container) container.classList.remove('visible');
+        }
+
+        document.addEventListener('click', function(e) {
+            const container = document.getElementById('predictiveResults');
+            if (container && !container.contains(e.target)) {
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput && !searchInput.contains(e.target)) {
+                    hidePredictions();
+                }
+            }
+        });
+
+        function showFrustrationPopup(analysis) {
+            let popup = document.getElementById('aiAssistantPopup');
+            if (!popup) {
+                popup = document.createElement('div');
+                popup.id = 'aiAssistantPopup';
+                popup.className = 'ai-assistant-popup';
+                document.body.appendChild(popup);
+            }
+
+            popup.innerHTML = `
+                <div class="popup-header">
+                    <h3>🤖 Research Assistant</h3>
+                    <button class="close-popup" onclick="closeFrustrationPopup()">×</button>
+                </div>
+                <div class="popup-body">
+                    <p><strong>It looks like you're having some difficulty with your search.</strong></p>
+                    <ul>${(analysis.reasons || []).map(r => `<li>${r}</li>`).join('')}</ul>
+                    <p>${(analysis.suggestions || [])[0] || 'Try using simpler keywords.'}</p>
+                    <div class="popup-actions">
+                        <button class="btn-help" onclick="closeFrustrationPopup()">📅 Schedule Consultation</button>
+                        <button class="btn-dismiss" onclick="closeFrustrationPopup()">Dismiss</button>
+                    </div>
+                </div>
+            `;
+            popup.classList.add('visible');
+        }
+
+        function closeFrustrationPopup() {
+            const popup = document.getElementById('aiAssistantPopup');
+            if (popup) popup.classList.remove('visible');
+        }
+
+        document.addEventListener('click', function(e) {
+            const bookCard = e.target.closest('.book-card');
+            if (bookCard && searchSession.clicks.length > 0) {
+                searchSession.clicks[searchSession.clicks.length - 1]++;
+            }
+        });
+
+        // ===== COVER IMAGE HANDLING =====
         function handleCoverImageUpload(event) {
             const file = event.target.files[0];
             if (file) {
@@ -2395,19 +2580,16 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 }
                 const reader = new FileReader();
                 reader.onloadend = function() {
-                    const imageData = reader.result;
-                    currentCoverImageData = imageData;
-                    document.getElementById('coverImageData').value = imageData;
+                    document.getElementById('coverImageData').value = reader.result;
                     document.getElementById('coverPlaceholder').style.display = 'none';
                     document.getElementById('coverPreviewContainer').style.display = 'inline-block';
-                    document.getElementById('coverPreview').src = imageData;
+                    document.getElementById('coverPreview').src = reader.result;
                 };
                 reader.readAsDataURL(file);
             }
         }
 
         function removeCoverImage() {
-            currentCoverImageData = '';
             document.getElementById('coverImageData').value = '';
             document.getElementById('coverPlaceholder').style.display = 'flex';
             document.getElementById('coverPreviewContainer').style.display = 'none';
@@ -2425,19 +2607,16 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 }
                 const reader = new FileReader();
                 reader.onloadend = function() {
-                    const imageData = reader.result;
-                    editCoverImageData = imageData;
-                    document.getElementById('editCoverImageData').value = imageData;
+                    document.getElementById('editCoverImageData').value = reader.result;
                     document.getElementById('editCoverPlaceholder').style.display = 'none';
                     document.getElementById('editCoverPreviewContainer').style.display = 'inline-block';
-                    document.getElementById('editCoverPreview').src = imageData;
+                    document.getElementById('editCoverPreview').src = reader.result;
                 };
                 reader.readAsDataURL(file);
             }
         }
 
         function removeEditCoverImage() {
-            editCoverImageData = '';
             document.getElementById('editCoverImageData').value = '';
             document.getElementById('editCoverPlaceholder').style.display = 'flex';
             document.getElementById('editCoverPreviewContainer').style.display = 'none';
@@ -2459,7 +2638,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             document.getElementById('edit_description').value = description;
             
             if (coverImage && coverImage.length > 100) {
-                editCoverImageData = coverImage;
                 document.getElementById('editCoverImageData').value = coverImage;
                 document.getElementById('editCoverPlaceholder').style.display = 'none';
                 document.getElementById('editCoverPreviewContainer').style.display = 'inline-block';
@@ -2470,6 +2648,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             openModal('editBookModal');
         }
 
+        // ===== OTHER SEARCH FUNCTIONS =====
         function searchBooks(query) {
             const clearBtn = document.getElementById('clearSearchBtn');
             if (clearBtn) {
@@ -2484,13 +2663,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 else url.searchParams.delete('search');
                 window.location.href = url.toString();
             }, 400);
-        }
-
-        function clearSearch() {
-            document.getElementById('bookSearchInput').value = '';
-            const url = new URL(window.location.href);
-            url.searchParams.delete('search');
-            window.location.href = url.toString();
         }
 
         function searchUsers(query) {
@@ -2533,6 +2705,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             window.location.href = url.toString();
         }
 
+        // ===== MODAL FUNCTIONS =====
         function openApproveModal(requestId, studentName, bookTitle) {
             document.getElementById('approveRequestId').value = requestId;
             document.getElementById('approveStudentName').textContent = studentName || 'Unknown';
@@ -2563,7 +2736,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             openModal('returnConfirmModal');
         }
 
-        /* ===== PAY FINE CONFIRMATION ===== */
         function openPayConfirm(fineId, studentName, studentId, amount, reason) {
             document.getElementById('payFineId').value = fineId;
             document.getElementById('payStudentName').textContent = studentName || 'Unknown';
@@ -2588,7 +2760,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         setInterval(updateClock, 1000);
         updateClock();
 
-        /* ===== SIDEBAR TOGGLE (HAMBURGER) ===== */
+        // ===== SIDEBAR TOGGLE =====
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const content = document.getElementById('adminContent');
