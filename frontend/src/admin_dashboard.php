@@ -1352,7 +1352,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <?php endif; ?>
             </a>
             <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>" title="Search Books">
-                <span>🔍</span>
+                <span>⌕</span>
             </a>
             <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>" title="Reports">
                 <span>🖹</span>
@@ -1409,7 +1409,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <span class="nav-label">Reservations</span>
                 </a>
                 <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>">
-                    <span class="nav-icon">🔍</span>
+                    <span class="nav-icon">⌕</span>
                     <span class="nav-label">Search Books</span>
                 </a>
                 <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>">
@@ -1516,7 +1516,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <span class="action-label">Add User</span>
                     </a>
                     <a href="admin_dashboard.php?section=search" class="quick-action-card">
-                        <span class="action-icon">🔍</span>
+                        <span class="action-icon">⌕</span>
                         <span class="action-label">Search Books</span>
                     </a>
                     <a href="admin_dashboard.php?section=borrowings" class="quick-action-card">
