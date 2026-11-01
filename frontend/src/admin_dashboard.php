@@ -820,13 +820,40 @@ try {
         $classSetRequests = [];
         error_log('Admin class-set request load failed: ' . $e->getMessage());
     }
+    // Resolve teacher identifiers stored by older and newer request forms.
+    // Depending on the form version, teacher_id may contain users.id, users.user_id,
+    // users.auth_user_id, or the login username. Index all available identifiers.
     foreach ($users as $knownUser) {
-        if (!empty($knownUser['id'])) {
-            $teacherNameMap[(string)$knownUser['id']] = (string)($knownUser['full_name'] ?? $knownUser['username'] ?? $knownUser['id']);
+        $knownName = trim((string)($knownUser['full_name'] ?? ''));
+        if ($knownName === '') $knownName = trim((string)($knownUser['username'] ?? ''));
+        if ($knownName === '') $knownName = trim((string)($knownUser['email'] ?? ''));
+        foreach (['id', 'user_id', 'auth_user_id', 'username', 'email'] as $identifierField) {
+            if (!empty($knownUser[$identifierField])) {
+                $teacherNameMap[strtolower(trim((string)$knownUser[$identifierField]))] = $knownName;
+            }
         }
     }
+    $resolveTeacherName = function($teacherId) use (&$teacherNameMap) {
+        $key = strtolower(trim((string)$teacherId));
+        if ($key === '') return 'Unknown teacher';
+        if (!empty($teacherNameMap[$key])) return $teacherNameMap[$key];
+        // Fallback for request rows created with a UUID not present in the first lookup.
+        try {
+            $matches = supabaseRequest('users?select=*&id=eq.' . rawurlencode($key) . '&limit=1');
+            if (empty($matches)) $matches = supabaseRequest('users?select=*&user_id=eq.' . rawurlencode($key) . '&limit=1');
+            if (!empty($matches[0])) {
+                $u = $matches[0];
+                $name = trim((string)($u['full_name'] ?? '')) ?: trim((string)($u['username'] ?? '')) ?: trim((string)($u['email'] ?? ''));
+                if ($name !== '') {
+                    foreach (['id', 'user_id', 'auth_user_id', 'username', 'email'] as $f) if (!empty($u[$f])) $teacherNameMap[strtolower(trim((string)$u[$f]))] = $name;
+                    return $name;
+                }
+            }
+        } catch (Throwable $lookupError) { error_log('Teacher name lookup failed: ' . $lookupError->getMessage()); }
+        return 'Teacher account';
+    };
     foreach ($classSetRequests as &$classRequest) {
-        $classRequest['teacher_name'] = $teacherNameMap[(string)($classRequest['teacher_id'] ?? '')] ?? (string)($classRequest['teacher_id'] ?? 'Unknown teacher');
+        $classRequest['teacher_name'] = $resolveTeacherName($classRequest['teacher_id'] ?? '');
     }
     unset($classRequest);
     $pendingClassSetRequests = array_values(array_filter($classSetRequests, function($r) {
@@ -837,7 +864,7 @@ try {
         $purchaseRequests = supabaseRequest('book_purchase_requests?select=*&order=created_at.desc');
         if (!is_array($purchaseRequests)) $purchaseRequests = [];
         foreach ($purchaseRequests as &$purchaseRequest) {
-            $purchaseRequest['teacher_name'] = $teacherNameMap[(string)($purchaseRequest['teacher_id'] ?? '')] ?? (string)($purchaseRequest['teacher_id'] ?? 'Unknown teacher');
+            $purchaseRequest['teacher_name'] = $resolveTeacherName($purchaseRequest['teacher_id'] ?? '');
         }
         unset($purchaseRequest);
         $pendingPurchaseRequests = array_values(array_filter($purchaseRequests, function($r) {
@@ -1053,6 +1080,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .sidebar-nav a .nav-label { flex: 1; }
         .sidebar-nav a .request-count-badge { background: #b40f7d; color: white; font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-left: auto; }
         .workspace-nav-group { margin: 3px 0; }
+        .workspace-nav-group.open { background:rgba(255,255,255,.018); }
+        .workspace-nav-menu a span:first-child { min-width:0; }
+        .workspace-nav-menu a .request-count-badge { margin-left:auto; }
+        .workspace-nav-toggle:focus-visible, .workspace-nav-menu a:focus-visible { outline:2px solid #e6a2d0; outline-offset:2px; }
         .workspace-nav-toggle { width:100%; display:flex; align-items:center; gap:12px; padding:11px 24px; color:rgba(255,255,255,.58); background:transparent; border:0; border-left:3px solid transparent; text-align:left; font:inherit; font-size:14px; cursor:pointer; }
         .workspace-nav-toggle:hover, .workspace-nav-group.open .workspace-nav-toggle { color:#f0e8e8; background:rgba(255,255,255,.045); border-left-color:rgba(255,255,255,.15); }
         .workspace-nav-toggle .nav-icon { font-size:17px; width:22px; text-align:center; opacity:.7; }
@@ -1373,7 +1404,102 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         @media (hover: none) {
             .stat-card:hover, .quick-action-card:hover, .book-card:hover { transform: none; }
         }
-    </style>
+    
+        /* Shared dashboard hero header — matched to Teacher Dashboard */
+        .dashboard-header {
+            background: linear-gradient(135deg, #08080a 0%, #0a090a 30%, #d41688b0 60%, #ff0199a8 80%, #ff0199c9 100%) !important;
+            padding: 25px 30px !important;
+            border-radius: 16px !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            gap: 20px !important;
+            color: #fff !important;
+            margin-bottom: 23px !important;
+            min-height: 118px;
+            position: relative !important;
+            overflow: hidden !important;
+            flex-wrap: wrap;
+        }
+        .dashboard-header::after {
+            content: '';
+            position: absolute;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            right: 8%;
+            top: -150px;
+            background: rgba(255,255,255,.1);
+            pointer-events: none;
+        }
+        .dashboard-header .header-left,
+        .dashboard-header .header-left h1,
+        .dashboard-header .header-left p,
+        .dashboard-header .header-time {
+            position: relative;
+            z-index: 1;
+        }
+        .dashboard-header .header-left h1 {
+            color: #fff !important;
+            font-size: 22px !important;
+            margin: 0 0 7px !important;
+            line-height: 1.25;
+        }
+        .dashboard-header .header-left p {
+            color: #f6d9ed !important;
+            margin: 0 !important;
+            font-size: 12px !important;
+        }
+        .dashboard-header .header-time {
+            text-align: right !important;
+            padding: 10px 16px !important;
+            border: 1px solid rgba(255,255,255,.17) !important;
+            border-radius: 10px !important;
+            background: rgba(255,255,255,.08) !important;
+            color: #fff !important;
+            min-width: 138px;
+        }
+        .dashboard-header .header-time .time {
+            display: block !important;
+            color: #fff !important;
+            font-size: 18px !important;
+            font-weight: 700 !important;
+            margin-bottom: 3px;
+        }
+        .dashboard-header .header-time .date {
+            display: block !important;
+            color: #fff !important;
+            font-size: 12px !important;
+        }
+        @media (max-width: 600px) {
+            .dashboard-header { padding: 21px 20px !important; align-items: flex-start !important; }
+            .dashboard-header .header-time { text-align: left !important; }
+        }
+
+
+        /* Teacher-style decorative circle, explicitly layered behind header content */
+        .dashboard-content .dashboard-header {
+            isolation: isolate !important;
+        }
+        .dashboard-content .dashboard-header::before {
+            content: "" !important;
+            display: block !important;
+            position: absolute !important;
+            z-index: 0 !important;
+            width: 260px !important;
+            height: 260px !important;
+            border-radius: 50% !important;
+            right: 8% !important;
+            top: -150px !important;
+            background: rgba(255, 255, 255, .12) !important;
+            pointer-events: none !important;
+        }
+        .dashboard-content .dashboard-header > * {
+            position: relative;
+            z-index: 1;
+        }
+
+</style>
     
     <!-- Load Firebase and AI functions - path auto-detected -->
     <script src="<?php echo $basePath; ?>/firebase_config.js"></script>
@@ -1452,102 +1578,87 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 </div>
             </div>
             <nav class="sidebar-nav">
-                <a href="admin_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>">
-                    <span class="nav-icon">🗠</span>
-                    <span class="nav-label">Dashboard</span>
+                <!-- Administrator navigation stays directly in the sidebar. -->
+                <a href="admin_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Overview">
+                    <span class="nav-icon">▦</span><span class="nav-label">Overview</span>
                 </a>
-                <a href="admin_dashboard.php?section=users" class="<?php echo $section === 'users' ? 'active' : ''; ?>">
-                    <span class="nav-icon">◈</span>
-                    <span class="nav-label">Users</span>
+                <a href="admin_dashboard.php?section=users" class="<?php echo $section === 'users' ? 'active' : ''; ?>" title="User & Role Management">
+                    <span class="nav-icon">♙</span><span class="nav-label">User & Role Management</span>
                 </a>
-                <a href="admin_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>">
-                    <span class="nav-icon">🕮</span>
-                    <span class="nav-label">Books</span>
+                <a href="admin_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>" title="Book & Catalog Management">
+                    <span class="nav-icon">▤</span><span class="nav-label">Book & Catalog Management</span>
                 </a>
-                <a href="admin_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>">
-                    <span class="nav-icon">🕮🡪</span>
-                    <span class="nav-label">Borrowings</span>
+                <a href="admin_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>" title="Borrowings & Returns">
+                    <span class="nav-icon">↔</span><span class="nav-label">Borrowings & Returns</span>
                 </a>
-                <a href="admin_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>">
-                    <span class="nav-icon">₱</span>
-                    <span class="nav-label">Fines</span>
+                <a href="admin_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines & Penalties">
+                    <span class="nav-icon">₱</span><span class="nav-label">Fines & Penalties</span>
                 </a>
-                <a href="admin_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>">
-                    <span class="nav-icon">🖺</span>
-                    <span class="nav-label">Requests</span>
-                    <?php if (!empty($pendingRequests)): ?>
-                        <span class="request-count-badge"><?php echo count($pendingRequests); ?></span>
-                    <?php endif; ?>
+                <a href="admin_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>" title="Book Requests">
+                    <span class="nav-icon">▧</span><span class="nav-label">Book Requests</span>
+                    <?php if (!empty($pendingRequests)): ?><span class="request-count-badge"><?php echo count($pendingRequests); ?></span><?php endif; ?>
                 </a>
-                <a href="admin_dashboard.php?section=teacher_requests" class="<?php echo $section === 'teacher_requests' ? 'active' : ''; ?>">
-                    <span class="nav-icon">▤</span>
-                    <span class="nav-label">Teacher Bulk Requests</span>
+                <a href="admin_dashboard.php?section=teacher_requests" class="<?php echo $section === 'teacher_requests' ? 'active' : ''; ?>" title="Teacher Class Set Requests">
+                    <span class="nav-icon">▥</span><span class="nav-label">Teacher Class Set Requests</span>
                     <?php if (!empty($pendingClassSetRequests)): ?><span class="request-count-badge"><?php echo count($pendingClassSetRequests); ?></span><?php endif; ?>
                 </a>
-                <a href="admin_dashboard.php?section=purchase_requests" class="<?php echo $section === 'purchase_requests' ? 'active' : ''; ?>">
-                    <span class="nav-icon">₱</span>
-                    <span class="nav-label">Purchase Requests</span>
+                <a href="admin_dashboard.php?section=purchase_requests" class="<?php echo $section === 'purchase_requests' ? 'active' : ''; ?>" title="Purchase Requests">
+                    <span class="nav-icon">🛒</span><span class="nav-label">Purchase Requests</span>
                     <?php if (!empty($pendingPurchaseRequests)): ?><span class="request-count-badge"><?php echo count($pendingPurchaseRequests); ?></span><?php endif; ?>
                 </a>
-                <a href="admin_dashboard.php?section=reservations" class="<?php echo $section === 'reservations' ? 'active' : ''; ?>">
-                    <span class="nav-icon">⏱</span>
-                    <span class="nav-label">Reservations</span>
+                <a href="admin_dashboard.php?section=reservations" class="<?php echo $section === 'reservations' ? 'active' : ''; ?>" title="Reservations">
+                    <span class="nav-icon">▣</span><span class="nav-label">Reservations</span>
                 </a>
-                <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>">
-                    <span class="nav-icon">⌕</span>
-                    <span class="nav-label">Search Books</span>
+                <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>" title="Catalog Search">
+                    <span class="nav-icon">⌕</span><span class="nav-label">Catalog Search</span>
+                </a>
+                <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>" title="Reports & Analytics">
+                    <span class="nav-icon">▥</span><span class="nav-label">Reports & Analytics</span>
+                </a>
+                <a href="admin_dashboard.php?section=settings" class="<?php echo $section === 'settings' ? 'active' : ''; ?>" title="System Settings">
+                    <span class="nav-icon">⚙</span><span class="nav-label">System Settings</span>
                 </a>
 
-                <div class="workspace-nav-group <?php echo in_array($section, ['teacher_workspace','librarian_workspace','student_workspace'], true) ? 'workspace-current' : ''; ?>" id="workspaceNavGroup">
-                    <button type="button" class="workspace-nav-toggle" aria-expanded="false" aria-controls="workspaceNavMenu" onclick="toggleWorkspaceMenu()">
-                        <span class="nav-icon">▣</span>
-                        <span class="nav-label">Workspaces</span>
-                        <span class="workspace-chevron" aria-hidden="true">⌄</span>
+                <!-- All role workspaces are grouped under one dropdown on the admin dashboard. -->
+                <div class="workspace-nav-group" id="workspacesNavGroup">
+                    <button type="button" class="workspace-nav-toggle" aria-expanded="false" aria-controls="workspacesNavMenu" onclick="toggleSidebarGroup('workspacesNavGroup')">
+                        <span class="nav-icon">▣</span><span class="nav-label">Workspaces</span><span class="workspace-chevron" aria-hidden="true">⌄</span>
                     </button>
-                    <div class="workspace-nav-menu" id="workspaceNavMenu">
-                        <div class="workspace-subgroup">
-                            <div class="workspace-subheading">Teacher Workspace</div>
-                            <a href="./teacher/teacher_dashboard.php?section=dashboard"><span>Overview</span></a>
-                            <a href="./teacher/teacher_dashboard.php?section=catalog"><span>Book Catalog</span></a>
-                            <a href="./teacher/teacher_dashboard.php?section=requests"><span>Borrow Requests</span></a>
-                            <a href="./teacher/teacher_dashboard.php?section=borrowings"><span>My Borrowings</span></a>
-                            <a href="./teacher/teacher_dashboard.php?section=reservations"><span>Reservations</span></a>
-                            <a href="./teacher/teacher_dashboard.php?section=history"><span>Borrowing History</span></a>
-                            <a href="./teacher/library_workspace.php?tab=purchases"><span>Purchase Requests</span></a>
-                            <a href="./teacher/teacher_dashboard.php?section=notifications"><span>Notifications</span></a>
-                        </div>
+                    <div class="workspace-nav-menu" id="workspacesNavMenu">
                         <div class="workspace-subgroup">
                             <div class="workspace-subheading">Librarian Workspace</div>
-                            <a href="./librarian/librarian_dashboard.php?section=dashboard"><span>Overview</span></a>
+                            <a href="./librarian/librarian_dashboard.php"><span>Librarian Dashboard</span></a>
                             <a href="./librarian/librarian_dashboard.php?section=books"><span>Book Management</span></a>
-                            <a href="./librarian/librarian_dashboard.php?section=borrowings"><span>Borrowings & Returns</span></a>
+                            <a href="./librarian/librarian_dashboard.php?section=borrowings"><span>Borrowings &amp; Returns</span></a>
                             <a href="./librarian/librarian_dashboard.php?section=fines"><span>Fines Management</span></a>
+                            <a href="./librarian/librarian_dashboard.php?section=requests"><span>Class Set Requests</span></a>
+                            <a href="./librarian/librarian_dashboard.php?section=notifications"><span>Notifications</span></a>
                         </div>
                         <div class="workspace-subgroup">
                             <div class="workspace-subheading">Student Workspace</div>
-                            <a href="admin_dashboard.php?section=search"><span>Student Book Catalog</span></a>
-                            <a href="admin_dashboard.php?section=requests"><span>Student Requests</span></a>
-                            <a href="admin_dashboard.php?section=borrowings"><span>Student Borrowings</span></a>
-                            <a href="admin_dashboard.php?section=reservations"><span>Student Reservations</span></a>
+                            <a href="./students/student_dashboard.php"><span>Student Dashboard</span></a>
+                            <a href="./students/student_dashboard.php?section=search"><span>Student Book Catalog</span></a>
+                            <a href="./students/student_dashboard.php?section=borrowings"><span>My Borrowings</span></a>
+                            <a href="./students/student_dashboard.php?section=reservations"><span>Reservations</span></a>
+                            <a href="./students/student_dashboard.php?section=fines"><span>My Fines</span></a>
+                            <a href="./students/student_dashboard.php?section=requests"><span>My Requests</span></a>
+                            <a href="./students/student_dashboard.php?section=profile"><span>Student Profile</span></a>
                         </div>
                         <div class="workspace-subgroup">
-                            <div class="workspace-subheading">Admin Workspace</div>
-                            <a href="admin_dashboard.php?section=dashboard"><span>Admin Overview</span></a>
-                            <a href="admin_dashboard.php?section=users"><span>User & Role Management</span></a>
-                            <a href="admin_dashboard.php?section=reports"><span>Reports & Analytics</span></a>
-                            <a href="admin_dashboard.php?section=settings"><span>System Settings</span></a>
+                            <div class="workspace-subheading">Teacher Workspace</div>
+                            <a href="./teacher/teacher_dashboard.php"><span>Teacher Dashboard</span></a>
+                            <a href="./teacher/library_workspace.php?tab=overview"><span>Library Workspace Overview</span></a>
+                            <a href="./teacher/library_workspace.php?tab=subjects"><span>Subject Resources</span></a>
+                            <a href="./teacher/library_workspace.php?tab=class_sets"><span>Class Sets</span></a>
+                            <a href="./teacher/library_workspace.php?tab=reservations"><span>Lesson Reservations</span></a>
+                            <a href="./teacher/library_workspace.php?tab=assignments"><span>Reading Assignments</span></a>
+                            <a href="./teacher/library_workspace.php?tab=activities"><span>Library Activities</span></a>
+                            <a href="./teacher/library_workspace.php?tab=purchases"><span>Purchase Requests</span></a>
+                            <a href="./teacher/library_workspace.php?tab=eresources"><span>E-Resources</span></a>
+                            <a href="./teacher/library_workspace.php?tab=reports"><span>Teacher Reports</span></a>
                         </div>
                     </div>
                 </div>
-
-                <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>">
-                    <span class="nav-icon">🖹</span>
-                    <span class="nav-label">Reports</span>
-                </a>
-                <a href="admin_dashboard.php?section=settings" class="<?php echo $section === 'settings' ? 'active' : ''; ?>">
-                    <span class="nav-icon">⚙</span>
-                    <span class="nav-label">Settings</span>
-                </a>
             </nav>
             <div class="sidebar-footer">
                 <a href="admin_logout.php" class="logout-btn" title="Logout">
@@ -1568,7 +1679,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <div class="dashboard-header">
                     <div class="header-left">
                         <h1>Library Management System</h1>
-                        <p class="header-sub">Overview — <span id="currentDate"><?php echo date('F j, Y'); ?></span></p>
+                        <p class="header-sub">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'System Administrator'); ?> · St. Agnes Academy Library Management System</p>
                     </div>
                     <div class="header-time">
                         <span class="time" id="currentTime"><?php echo date('g:i A'); ?></span>
@@ -2328,6 +2439,16 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <?php endif; ?>
             </div>
 
+            <?php elseif ($section === 'student_profiles'): ?>
+                <div class="section-header"><div><h1>Student Profiles</h1><p>Administrator view of student directory and linked account details.</p></div></div>
+                <div class="table-container" style="background:#fff;border:1px solid #f0e0ee;border-radius:14px;padding:18px;overflow-x:auto;">
+                    <table class="data-table" style="width:100%;border-collapse:collapse;"><thead><tr><th>Student</th><th>Student ID</th><th>Year / Grade</th><th>Section</th><th>Email</th><th>Account ID</th></tr></thead><tbody>
+                    <?php if (!empty($students)): foreach ($students as $studentRow): $studentUser = $studentRow['users'] ?? []; ?>
+                        <tr><td><?php echo htmlspecialchars($studentUser['full_name'] ?? 'Student account'); ?></td><td><?php echo htmlspecialchars($studentRow['student_id'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentRow['year_level'] ?? $studentRow['grade_level'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentRow['section'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentUser['email'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentUser['user_id'] ?? $studentRow['user_id'] ?? '—'); ?></td></tr>
+                    <?php endforeach; else: ?><tr><td colspan="6" style="text-align:center;padding:25px;color:#887988;">No student profiles found.</td></tr><?php endif; ?>
+                    </tbody></table>
+                </div>
+
             <?php elseif ($section === 'search'): ?>
             <!-- ===== AI BOOK SEARCH - SAME AS STUDENT ===== -->
             <div class="book-management">
@@ -2571,36 +2692,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             </div>
 
             <?php elseif ($section === 'settings'): ?>
-            <div class="settings-content">
-                <h1 style="margin-bottom:20px;">System Settings</h1>
-                <div style="background:#ffffff;padding:24px 28px;border-radius:16px;border:1px solid #f0e0ee;margin-bottom:20px;">
-                    <h2 style="margin:0 0 16px 0;color:#1a1a2e;font-size:18px;font-weight:600;">Fine Settings</h2>
-                    <form method="POST" action="admin_dashboard.php?section=settings">
-                        <input type="hidden" name="action" value="update_fines">
-                        <div class="settings-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;">
-                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Fine per Day (₱)</label><input type="number" name="fine_per_day" value="<?php echo $fineSettingsData['fine_per_day'] ?? 50; ?>" step="0.50" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
-                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Lost Book Fee (₱)</label><input type="number" name="lost_book_fee" value="<?php echo $fineSettingsData['lost_book_fee'] ?? 500; ?>" step="50" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
-                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Damaged Book Fee (₱)</label><input type="number" name="damaged_book_fee" value="<?php echo $fineSettingsData['damaged_book_fee'] ?? 200; ?>" step="50" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
-                            <div class="setting-item"><label style="font-weight:600;font-size:14px;color:#4a3a4a;display:block;margin-bottom:4px;">Grace Period (days)</label><input type="number" name="grace_period" value="<?php echo $fineSettingsData['grace_period'] ?? 0; ?>" min="0" style="padding:10px 14px;border:2px solid #f0e0ee;border-radius:8px;font-size:14px;background:#faf5fa;width:100%;"></div>
-                        </div>
-                        <button type="submit" class="btn-save" style="margin-top:16px;">Save Fine Settings</button>
-                    </form>
-                </div>
-                <div style="background:#ffffff;padding:24px 28px;border-radius:16px;border:1px solid #f0e0ee;">
-                    <h2 style="margin:0 0 16px 0;color:#1a1a2e;font-size:18px;font-weight:600;">Academic Years</h2>
-                    <?php if (!empty($academicYears)): ?>
-                        <?php foreach ($academicYears as $year): ?>
-                            <div style="display:flex;gap:20px;padding:12px 0;border-bottom:1px solid #f5eef5;flex-wrap:wrap;align-items:center;">
-                                <span><?php echo htmlspecialchars($year['year_name'] ?? ''); ?></span>
-                                <span><?php echo htmlspecialchars($year['start_date'] ?? ''); ?> - <?php echo htmlspecialchars($year['end_date'] ?? ''); ?></span>
-                                <span style="color:#b40f7d;font-weight:600;"><?php echo ($year['is_current'] ?? false) ? 'Current' : ''; ?></span>
-                            </div>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <p style="color:#b8a8b8;padding:20px 0;text-align:center;">No academic years set</p>
-                    <?php endif; ?>
-                </div>
-            </div>
+                <?php require __DIR__ . '/admin_settings.php'; ?>
             <?php endif; ?>
         </div>
     </div>
@@ -3139,9 +3231,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ===== WORKSPACE DROPDOWN =====
-        function toggleWorkspaceMenu() {
-            const group = document.getElementById('workspaceNavGroup');
+        // ===== ROLE SIDEBAR DROPDOWNS (Librarian / Teacher / Student) =====
+        function toggleSidebarGroup(groupId) {
+            const group = document.getElementById(groupId);
             const button = group ? group.querySelector('.workspace-nav-toggle') : null;
             if (!group || !button) return;
             const isOpen = group.classList.toggle('open');

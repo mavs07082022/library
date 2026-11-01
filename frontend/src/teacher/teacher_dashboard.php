@@ -220,7 +220,7 @@ function teacherStatusClass($status) {
         <a href="library_workspace.php?tab=class_sets"><span class="ico">▤</span><span class="label">Class Set Requests</span></a>
         <?php if($role === 'admin'): ?><a href="../admin_dashboard.php"><span class="ico">⚙</span><span class="label">Admin Dashboard</span></a><?php endif; ?>
             </nav>
-    <div class="side-bottom"><a class="logout" href="../admin_logout.php">↪ &nbsp;Logout</a></div>
+    <div class="side-bottom"><?php if ($role === 'admin'): ?><a href="../admin_dashboard.php" class="logout" style="margin-bottom:9px;background:#fce7f3;color:#9d174d;border-color:#f9a8d4;font-weight:700">← Back to Admin Dashboard</a><?php endif; ?><a class="logout" href="../admin_logout.php">↪ &nbsp;Logout</a></div>
 </aside>
 <main class="main" id="main">
 <header class="topbar"><button class="hamb" id="hamb" aria-label="Toggle navigation">☰</button><div class="toplinks"><?php if($role==='admin'): ?><a href="../admin_dashboard.php">Admin Dashboard</a><?php endif; ?></div></header>

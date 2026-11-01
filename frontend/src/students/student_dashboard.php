@@ -1,7 +1,10 @@
 <?php
 session_start();
 date_default_timezone_set('Asia/Manila');
-if (!isset($_SESSION['user_id']) || $_SESSION['role'] !== 'student') {
+$studentWorkspaceRole = strtolower(trim((string)($_SESSION['role'] ?? '')));
+$isAdminPreview = ($studentWorkspaceRole === 'admin');
+
+if (!isset($_SESSION['user_id']) || !in_array($studentWorkspaceRole, ['student', 'admin'], true)) {
     header('Location: ../homepage.php');
     exit;
 }
@@ -899,7 +902,102 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
         @media (hover: none) {
             .stat-card:hover, .quick-action-card:hover, .book-card:hover { transform: none; }
         }
-    </style>
+    
+        /* Shared dashboard hero header — matched to Teacher Dashboard */
+        .dashboard-header {
+            background: linear-gradient(135deg, #08080a 0%, #0a090a 30%, #d41688b0 60%, #ff0199a8 80%, #ff0199c9 100%) !important;
+            padding: 25px 30px !important;
+            border-radius: 16px !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            gap: 20px !important;
+            color: #fff !important;
+            margin-bottom: 23px !important;
+            min-height: 118px;
+            position: relative !important;
+            overflow: hidden !important;
+            flex-wrap: wrap;
+        }
+        .dashboard-header::after {
+            content: '';
+            position: absolute;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            right: 8%;
+            top: -150px;
+            background: rgba(255,255,255,.1);
+            pointer-events: none;
+        }
+        .dashboard-header .header-left,
+        .dashboard-header .header-left h1,
+        .dashboard-header .header-left p,
+        .dashboard-header .header-time {
+            position: relative;
+            z-index: 1;
+        }
+        .dashboard-header .header-left h1 {
+            color: #fff !important;
+            font-size: 22px !important;
+            margin: 0 0 7px !important;
+            line-height: 1.25;
+        }
+        .dashboard-header .header-left p {
+            color: #f6d9ed !important;
+            margin: 0 !important;
+            font-size: 12px !important;
+        }
+        .dashboard-header .header-time {
+            text-align: right !important;
+            padding: 10px 16px !important;
+            border: 1px solid rgba(255,255,255,.17) !important;
+            border-radius: 10px !important;
+            background: rgba(255,255,255,.08) !important;
+            color: #fff !important;
+            min-width: 138px;
+        }
+        .dashboard-header .header-time .time {
+            display: block !important;
+            color: #fff !important;
+            font-size: 18px !important;
+            font-weight: 700 !important;
+            margin-bottom: 3px;
+        }
+        .dashboard-header .header-time .date {
+            display: block !important;
+            color: #fff !important;
+            font-size: 12px !important;
+        }
+        @media (max-width: 600px) {
+            .dashboard-header { padding: 21px 20px !important; align-items: flex-start !important; }
+            .dashboard-header .header-time { text-align: left !important; }
+        }
+
+
+        /* Teacher-style decorative circle, explicitly layered behind header content */
+        .dashboard-content .dashboard-header {
+            isolation: isolate !important;
+        }
+        .dashboard-content .dashboard-header::before {
+            content: "" !important;
+            display: block !important;
+            position: absolute !important;
+            z-index: 0 !important;
+            width: 260px !important;
+            height: 260px !important;
+            border-radius: 50% !important;
+            right: 8% !important;
+            top: -150px !important;
+            background: rgba(255, 255, 255, .12) !important;
+            pointer-events: none !important;
+        }
+        .dashboard-content .dashboard-header > * {
+            position: relative;
+            z-index: 1;
+        }
+
+</style>
     
     <script src="<?php echo $basePath; ?>/firebase_config.js"></script>
     <script src="<?php echo $basePath; ?>/ai_functions.js"></script>
@@ -997,6 +1095,13 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
                     <span class="nav-label">Profile</span>
                 </a>
             </nav>
+            <?php if ($isAdminPreview): ?>
+            <div style="padding:12px 18px 0;">
+                <a href="../admin_dashboard.php" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;border-radius:9px;background:#fce7f3;color:#9d174d;border:1px solid #f9a8d4;font-size:12px;font-weight:700;text-decoration:none;">
+                    ← Back to Admin Dashboard
+                </a>
+            </div>
+            <?php endif; ?>
             <div class="sidebar-footer">
                 <a href="../admin_logout.php" class="logout-btn">Logout</a>
             </div>
@@ -1005,6 +1110,11 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
         <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileMenu()"></div>
 
         <div class="student-content" id="studentContent">
+            <?php if ($isAdminPreview): ?>
+                <div style="margin:14px 18px 0;padding:11px 14px;border:1px solid #f9a8d4;border-radius:10px;background:#fdf2f8;color:#9d174d;font-size:12px;">
+                    <strong>Administrator Preview:</strong> You are viewing the complete Student Workspace using your administrator account.
+                </div>
+            <?php endif; ?>
             <?php if ($message): ?>
                 <div class="message <?php echo strpos($message, 'Error') !== false || strpos($message, 'restricted') !== false || strpos($message, 'not available') !== false ? 'error' : 'success'; ?>">
                     <?php echo htmlspecialchars($message); ?>
@@ -1016,7 +1126,7 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
                 <div class="dashboard-header">
                     <div class="header-left">
                         <h1>Student Dashboard</h1>
-                        <p class="header-date">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Student'); ?>!</p>
+                        <p class="header-date">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Student'); ?> · St. Agnes Academy Library Management System</p>
                     </div>
                     <div class="header-time">
                         <span class="time" id="currentTime"><?php echo date('g:i A'); ?></span>

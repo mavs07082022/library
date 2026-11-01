@@ -1344,6 +1344,101 @@ function hasValidCoverImage($coverImage) {
         .nav-badge{margin-left:auto;background:#b40f7d;color:#fff;border-radius:20px;padding:2px 7px;font-size:10px}.request-review-form{display:grid;grid-template-columns:110px minmax(120px,1fr) auto;gap:6px;min-width:300px}.request-review-form select,.request-review-form input{padding:8px;border:1px solid #ead8e5;border-radius:7px;min-width:0}.librarian-notice{display:flex;justify-content:space-between;align-items:center;gap:15px;background:#fff;border:1px solid #ead8e5;border-radius:11px;padding:14px;margin:10px 0}.librarian-notice.unread{background:#fff7fc;border-color:#dfafd0}.librarian-notice strong{font-size:13px}.librarian-notice p{font-size:12px;color:#6f6170;margin:5px 0}.librarian-notice small{font-size:10px;color:#968696}.empty-state{padding:22px;text-align:center;color:#8d7d89}.predictive-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ead8e5;border-top:0;border-radius:0 0 12px 12px;max-height:340px;overflow:auto;z-index:1200;display:none;box-shadow:0 12px 28px rgba(0,0,0,.12)}
         .predictive-results.visible{display:block}.predictive-item{display:block;width:100%;padding:12px 15px;text-align:left;border:0;border-bottom:1px solid #f2eaf0;background:#fff;cursor:pointer}.predictive-item:hover,.predictive-item:focus{background:#fcf3f9;outline:none}.pred-title{font-weight:600;color:#1a1a1a;font-size:14px}.pred-author{color:#766575;font-size:12px;margin-top:3px}.pred-badge{display:inline-block;margin-top:5px;padding:2px 8px;border-radius:10px;background:#f7e8f1;color:#8e1769;font-size:10px}.pred-score{float:right;color:#8e1769;font-size:11px}
 
+
+        /* Shared dashboard hero header — matched to Teacher Dashboard */
+        .dashboard-header {
+            background: linear-gradient(135deg, #08080a 0%, #0a090a 30%, #d41688b0 60%, #ff0199a8 80%, #ff0199c9 100%) !important;
+            padding: 25px 30px !important;
+            border-radius: 16px !important;
+            display: flex !important;
+            justify-content: space-between !important;
+            align-items: center !important;
+            gap: 20px !important;
+            color: #fff !important;
+            margin-bottom: 23px !important;
+            min-height: 118px;
+            position: relative !important;
+            overflow: hidden !important;
+            flex-wrap: wrap;
+        }
+        .dashboard-header::after {
+            content: '';
+            position: absolute;
+            width: 260px;
+            height: 260px;
+            border-radius: 50%;
+            right: 8%;
+            top: -150px;
+            background: rgba(255,255,255,.1);
+            pointer-events: none;
+        }
+        .dashboard-header .header-left,
+        .dashboard-header .header-left h1,
+        .dashboard-header .header-left p,
+        .dashboard-header .header-time {
+            position: relative;
+            z-index: 1;
+        }
+        .dashboard-header .header-left h1 {
+            color: #fff !important;
+            font-size: 22px !important;
+            margin: 0 0 7px !important;
+            line-height: 1.25;
+        }
+        .dashboard-header .header-left p {
+            color: #f6d9ed !important;
+            margin: 0 !important;
+            font-size: 12px !important;
+        }
+        .dashboard-header .header-time {
+            text-align: right !important;
+            padding: 10px 16px !important;
+            border: 1px solid rgba(255,255,255,.17) !important;
+            border-radius: 10px !important;
+            background: rgba(255,255,255,.08) !important;
+            color: #fff !important;
+            min-width: 138px;
+        }
+        .dashboard-header .header-time .time {
+            display: block !important;
+            color: #fff !important;
+            font-size: 18px !important;
+            font-weight: 700 !important;
+            margin-bottom: 3px;
+        }
+        .dashboard-header .header-time .date {
+            display: block !important;
+            color: #fff !important;
+            font-size: 12px !important;
+        }
+        @media (max-width: 600px) {
+            .dashboard-header { padding: 21px 20px !important; align-items: flex-start !important; }
+            .dashboard-header .header-time { text-align: left !important; }
+        }
+
+
+        /* Teacher-style decorative circle, explicitly layered behind header content */
+        .dashboard-content .dashboard-header {
+            isolation: isolate !important;
+        }
+        .dashboard-content .dashboard-header::before {
+            content: "" !important;
+            display: block !important;
+            position: absolute !important;
+            z-index: 0 !important;
+            width: 260px !important;
+            height: 260px !important;
+            border-radius: 50% !important;
+            right: 8% !important;
+            top: -150px !important;
+            background: rgba(255, 255, 255, .12) !important;
+            pointer-events: none !important;
+        }
+        .dashboard-content .dashboard-header > * {
+            position: relative;
+            z-index: 1;
+        }
+
 </style>
 </head>
 <body>
@@ -1409,6 +1504,13 @@ function hasValidCoverImage($coverImage) {
                     <?php if (!empty($unreadLibrarianNotifications)): ?><span class="nav-badge"><?=count($unreadLibrarianNotifications)?></span><?php endif; ?>
                 </a>
             </nav>
+            <?php if (strtolower((string)($_SESSION['role'] ?? '')) === 'admin'): ?>
+            <div style="padding:12px 18px 0;">
+                <a href="../admin_dashboard.php" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:11px 12px;border-radius:9px;background:#fce7f3;color:#9d174d;border:1px solid #f9a8d4;font-size:12px;font-weight:700;text-decoration:none;">
+                    ← Back to Admin Dashboard
+                </a>
+            </div>
+            <?php endif; ?>
             <div class="sidebar-footer">
                 <a href="../admin_logout.php" class="logout-btn">
                     <span class="logout-text">Logout</span>
@@ -1428,7 +1530,7 @@ function hasValidCoverImage($coverImage) {
                 <div class="dashboard-header">
                     <div class="header-left">
                         <h1>Librarian Dashboard</h1>
-                        <p class="header-date">Welcome, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Librarian'); ?>! — <?php echo date('F j, Y'); ?></p>
+                        <p class="header-date">Welcome back, <?php echo htmlspecialchars($_SESSION['full_name'] ?? 'Librarian'); ?> · St. Agnes Academy Library Management System</p>
                     </div>
                     <div class="header-time">
                         <span class="time" id="currentTime"><?php echo date('g:i A'); ?></span>
