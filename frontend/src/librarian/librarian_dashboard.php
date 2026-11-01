@@ -48,6 +48,8 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     return json_decode($response, true);
 }
 
+require_once dirname(__DIR__) . '/loan_policy_notifications.php';
+
 /**
  * Determine if a borrowing is overdue based on current date (Asia/Manila).
  */
@@ -72,6 +74,63 @@ $action = isset($_GET['action']) ? $_GET['action'] : '';
 
 $studentId = isset($_SESSION['student_id']) ? $_SESSION['student_id'] : null;
 $userId = isset($_SESSION['user_id']) ? $_SESSION['user_id'] : null;
+if (empty($_SESSION['librarian_csrf'])) $_SESSION['librarian_csrf'] = bin2hex(random_bytes(32));
+$librarianCsrf = $_SESSION['librarian_csrf'];
+
+// ============================================
+// TEACHER CLASS-SET REQUESTS + NOTIFICATIONS
+// ============================================
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($section, ['requests', 'notifications'], true)) {
+    try {
+        if (!hash_equals($librarianCsrf, (string)($_POST['csrf_token'] ?? ''))) {
+            throw new Exception('Your session token expired. Refresh the page and try again.');
+        }
+        $requestAction = (string)($_POST['request_action'] ?? '');
+        if ($requestAction === 'review_class_set' && $section === 'requests') {
+            $requestId = trim((string)($_POST['request_id'] ?? ''));
+            $newStatus = trim((string)($_POST['status'] ?? ''));
+            $reviewNote = trim((string)($_POST['review_notes'] ?? ''));
+            if ($requestId === '' || !in_array($newStatus, ['Approved', 'Rejected', 'Ready'], true)) {
+                throw new Exception('Choose a valid request and review status.');
+            }
+            $found = supabaseRequest('class_set_requests?select=id,teacher_id,book_title,copies_requested&id=eq.' . rawurlencode($requestId));
+            if (!$found) throw new Exception('Class-set request not found.');
+            $request = $found[0];
+            supabaseRequest('class_set_requests?id=eq.' . rawurlencode($requestId), 'PATCH', [
+                'status' => $newStatus,
+                'reviewed_by' => (string)$userId,
+                'reviewed_at' => date('c')
+            ]);
+            $teacherId = (string)($request['teacher_id'] ?? '');
+            if ($teacherId !== '') {
+                $noticeMessage = 'Your request for ' . (int)($request['copies_requested'] ?? 0) . ' copies of "' . (string)($request['book_title'] ?? 'the requested book') . '" was ' . strtolower($newStatus) . '.';
+                if ($reviewNote !== '') $noticeMessage .= ' Librarian note: ' . $reviewNote;
+                supabaseRequest('notifications', 'POST', [
+                    'user_id' => $teacherId,
+                    'title' => 'Class set request ' . $newStatus,
+                    'message' => $noticeMessage,
+                    'type' => 'request_update',
+                    'icon' => '📚',
+                    'is_read' => false,
+                    'action_url' => '../teacher/library_workspace.php?tab=class_sets',
+                    'action_label' => 'View request'
+                ]);
+            }
+            header('Location: librarian_dashboard.php?section=requests&msg=' . rawurlencode('Request ' . $newStatus . ' and teacher notified.'));
+            exit;
+        }
+        if ($requestAction === 'mark_notification_read' && $section === 'notifications') {
+            $notificationId = trim((string)($_POST['notification_id'] ?? ''));
+            if ($notificationId === '') throw new Exception('Notification ID is missing.');
+            supabaseRequest('notifications?id=eq.' . rawurlencode($notificationId) . '&user_id=eq.' . rawurlencode((string)$userId), 'PATCH', ['is_read' => true]);
+            header('Location: librarian_dashboard.php?section=notifications&msg=' . rawurlencode('Notification marked as read.'));
+            exit;
+        }
+    } catch (Exception $e) {
+        header('Location: librarian_dashboard.php?section=' . rawurlencode($section) . '&msg=' . rawurlencode('Unable to complete action: ' . $e->getMessage()));
+        exit;
+    }
+}
 
 // ============================================
 // HANDLE BOOK ACTIONS
@@ -185,49 +244,19 @@ if ($section === 'books' && isset($_GET['delete'])) {
 // Return Book
 if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
     $borrowingId = $_GET['id'];
+    $issue = $_GET['issue'] ?? 'none';
     try {
-        $borrowing = supabaseRequest('borrowings?select=book_id,status,due_date,user_id&id=eq.' . $borrowingId);
-        if (empty($borrowing)) {
-            header('Location: librarian_dashboard.php?section=borrowings&msg=Borrowing not found');
-            exit;
-        }
-        
-        if (($borrowing[0]['status'] ?? '') === 'Returned') {
-            header('Location: librarian_dashboard.php?section=borrowings&msg=Book already returned');
-            exit;
-        }
-        
-        // Compute if this was overdue at time of return
-        $wasOverdue = false;
-        $dueDate = $borrowing[0]['due_date'] ?? null;
-        if ($dueDate) {
-            $dueTimestamp = strtotime($dueDate);
-            $today = strtotime(date('Y-m-d'));
-            if ($dueTimestamp !== false && $dueTimestamp < $today) {
-                $wasOverdue = true;
-            }
-        }
-        
-        supabaseRequest('borrowings?id=eq.' . $borrowingId, 'PATCH', [
-            'status' => 'Returned',
-            'return_date' => date('Y-m-d H:i:s')
-        ]);
-        
-        $book = supabaseRequest('books?select=available&id=eq.' . $borrowing[0]['book_id']);
-        if (!empty($book)) {
-            supabaseRequest('books?id=eq.' . $borrowing[0]['book_id'], 'PATCH', [
-                'available' => ($book[0]['available'] + 1)
-            ]);
-        }
-        
-        $msg = 'Book returned successfully';
-        if ($wasOverdue) {
-            $msg = 'Book returned successfully. Note: This was an overdue return — a fine may need to be applied.';
-        }
+        $rows = supabaseRequest('borrowings?select=id,book_id,status,due_date,user_id&id=eq.' . rawurlencode($borrowingId));
+        if (empty($rows)) throw new Exception('Borrowing not found');
+        if (in_array(($rows[0]['status'] ?? ''), ['Returned','Lost','Damaged'], true)) throw new Exception('This borrowing has already been closed or reported.');
+        $result = libraryProcessBookReturn($rows[0], $issue, 'librarian_dashboard.php');
+        $msg = 'Book return recorded';
+        if ($result['amount'] > 0) $msg .= '. Fine: ₱' . number_format($result['amount'], 2) . ' (' . $result['reason'] . ')';
         header('Location: librarian_dashboard.php?section=borrowings&msg=' . urlencode($msg));
         exit;
-    } catch (Exception $e) {
-        header('Location: librarian_dashboard.php?section=borrowings&msg=Error returning book');
+    } catch (Throwable $e) {
+        error_log('Return processing failed: ' . $e->getMessage());
+        header('Location: librarian_dashboard.php?section=borrowings&msg=' . urlencode('Unable to process return: ' . $e->getMessage()));
         exit;
     }
 }
@@ -310,6 +339,8 @@ $borrowings = [];
 $fines = [];
 $users = [];
 $students = [];
+$classSetRequests = [];
+$librarianNotifications = [];
 $message = isset($_GET['msg']) ? $_GET['msg'] : '';
 $searchTerm = isset($_GET['search']) ? $_GET['search'] : '';
 
@@ -320,6 +351,14 @@ try {
     $users = supabaseRequest('users?select=*');
     $fines = supabaseRequest('fines?select=*');
     $students = supabaseRequest('students?select=*,users(full_name,user_id,email)');
+    try { $classSetRequests = supabaseRequest('class_set_requests?select=*&order=created_at.desc'); } catch (Exception $requestLoadError) { $classSetRequests = []; }
+    try { $librarianNotifications = supabaseRequest('notifications?select=*&user_id=eq.' . rawurlencode((string)$userId) . '&order=created_at.desc&limit=60'); } catch (Exception $notificationLoadError) { $librarianNotifications = []; }
+    $teacherNameMap = [];
+    foreach ($users as $knownUser) if (!empty($knownUser['id'])) $teacherNameMap[(string)$knownUser['id']] = (string)($knownUser['full_name'] ?? $knownUser['username'] ?? $knownUser['id']);
+    foreach ($classSetRequests as &$classRequest) $classRequest['teacher_name'] = $teacherNameMap[(string)($classRequest['teacher_id'] ?? '')] ?? (string)($classRequest['teacher_id'] ?? 'Unknown teacher');
+    unset($classRequest);
+    $unreadLibrarianNotifications = array_values(array_filter($librarianNotifications, function($n) { return empty($n['is_read']); }));
+    $pendingClassSetRequests = array_values(array_filter($classSetRequests, function($r) { return in_array(($r['status'] ?? 'Pending'), ['Pending', 'Under Review'], true); }));
     
     $catMap = [];
     foreach ($categories as $cat) {
@@ -358,11 +397,15 @@ try {
 
 $filteredBooks = $books;
 if (!empty($searchTerm)) {
-    $searchLower = strtolower($searchTerm);
-    $filteredBooks = array_filter($books, function($book) use ($searchLower) {
-        return strpos(strtolower($book['title'] ?? ''), $searchLower) !== false ||
-               strpos(strtolower($book['author'] ?? ''), $searchLower) !== false ||
-               strpos(strtolower($book['isbn'] ?? ''), $searchLower) !== false;
+    $searchTerms = preg_split('/\\s+/u', mb_strtolower(preg_replace('/[^\\p{L}\\p{N}]+/u', ' ', $searchTerm), 'UTF-8'));
+    $stopTerms = array_fill_keys(preg_split('/\\s+/u', 'ang mga ng na sa si kay kina at o or and the a an of for about tungkol libro aklat book books hanap hanapin naghahanap maghanap gusto ko ako po ba may mayroon meron'), true);
+    $searchTerms = array_values(array_filter($searchTerms, function($term) use ($stopTerms) { return mb_strlen($term, 'UTF-8') > 1 && !isset($stopTerms[$term]); }));
+    $synonyms = ['programasyon'=>['programming','program','coding'], 'programming'=>['program','coding'], 'paghahack'=>['hacking','hack'], 'hacking'=>['hack','cybersecurity'], 'hack'=>['hacking','cybersecurity'], 'kasaysayan'=>['history'], 'agham'=>['science'], 'matematika'=>['math','mathematics'], 'panitikan'=>['literature'], 'teknolohiya'=>['technology'], 'kalikasan'=>['nature','environment']];
+    foreach ($searchTerms as $term) if (isset($synonyms[$term])) $searchTerms = array_merge($searchTerms, $synonyms[$term]);
+    $filteredBooks = array_filter($books, function($book) use ($searchTerms) {
+        $haystack = mb_strtolower(implode(' ', [$book['title'] ?? '', $book['author'] ?? '', $book['isbn'] ?? '', $book['keywords'] ?? '', $book['description'] ?? '', $book['publisher'] ?? '', $book['categories']['name'] ?? '']), 'UTF-8');
+        foreach ($searchTerms as $term) if (mb_strpos($haystack, $term, 0, 'UTF-8') !== false) return true;
+        return false;
     });
 }
 
@@ -1297,7 +1340,11 @@ function hasValidCoverImage($coverImage) {
         @media (hover: none) {
             .stat-card:hover, .quick-action-card:hover { transform: none; }
         }
-    </style>
+    
+        .nav-badge{margin-left:auto;background:#b40f7d;color:#fff;border-radius:20px;padding:2px 7px;font-size:10px}.request-review-form{display:grid;grid-template-columns:110px minmax(120px,1fr) auto;gap:6px;min-width:300px}.request-review-form select,.request-review-form input{padding:8px;border:1px solid #ead8e5;border-radius:7px;min-width:0}.librarian-notice{display:flex;justify-content:space-between;align-items:center;gap:15px;background:#fff;border:1px solid #ead8e5;border-radius:11px;padding:14px;margin:10px 0}.librarian-notice.unread{background:#fff7fc;border-color:#dfafd0}.librarian-notice strong{font-size:13px}.librarian-notice p{font-size:12px;color:#6f6170;margin:5px 0}.librarian-notice small{font-size:10px;color:#968696}.empty-state{padding:22px;text-align:center;color:#8d7d89}.predictive-results{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ead8e5;border-top:0;border-radius:0 0 12px 12px;max-height:340px;overflow:auto;z-index:1200;display:none;box-shadow:0 12px 28px rgba(0,0,0,.12)}
+        .predictive-results.visible{display:block}.predictive-item{display:block;width:100%;padding:12px 15px;text-align:left;border:0;border-bottom:1px solid #f2eaf0;background:#fff;cursor:pointer}.predictive-item:hover,.predictive-item:focus{background:#fcf3f9;outline:none}.pred-title{font-weight:600;color:#1a1a1a;font-size:14px}.pred-author{color:#766575;font-size:12px;margin-top:3px}.pred-badge{display:inline-block;margin-top:5px;padding:2px 8px;border-radius:10px;background:#f7e8f1;color:#8e1769;font-size:10px}.pred-score{float:right;color:#8e1769;font-size:11px}
+
+</style>
 </head>
 <body>
     <header class="top-header" id="topHeader">
@@ -1320,6 +1367,8 @@ function hasValidCoverImage($coverImage) {
             <a href="librarian_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines">
                 <span>₱ </span>
             </a>
+            <a href="librarian_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>" title="Teacher Requests"><span>▤</span></a>
+            <a href="librarian_dashboard.php?section=notifications" class="<?php echo $section === 'notifications' ? 'active' : ''; ?>" title="Notifications"><span>♧</span></a>
         </nav>
     </header>
 
@@ -1350,6 +1399,14 @@ function hasValidCoverImage($coverImage) {
                 <a href="librarian_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>">
                     <span class="nav-icon">₱</span>
                     <span class="nav-label">Fines</span>
+                </a>
+                <a href="librarian_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>">
+                    <span class="nav-icon">▤</span><span class="nav-label">Teacher Requests</span>
+                    <?php if (!empty($pendingClassSetRequests)): ?><span class="nav-badge"><?=count($pendingClassSetRequests)?></span><?php endif; ?>
+                </a>
+                <a href="librarian_dashboard.php?section=notifications" class="<?php echo $section === 'notifications' ? 'active' : ''; ?>">
+                    <span class="nav-icon">♧</span><span class="nav-label">Notifications</span>
+                    <?php if (!empty($unreadLibrarianNotifications)): ?><span class="nav-badge"><?=count($unreadLibrarianNotifications)?></span><?php endif; ?>
                 </a>
             </nav>
             <div class="sidebar-footer">
@@ -1450,6 +1507,21 @@ function hasValidCoverImage($coverImage) {
                 </div>
             </div>
 
+            <?php elseif ($section === 'requests'): ?>
+            <div class="book-management">
+                <div class="section-header"><div><h1>Teacher Class-Set Requests</h1><p>Review bulk book requests submitted by teachers.</p></div><span class="status pending"><?=count($pendingClassSetRequests)?> pending</span></div>
+                <div class="table-container"><table class="data-table"><thead><tr><th>Teacher</th><th>Book</th><th>Copies</th><th>Class</th><th>Needed</th><th>Purpose</th><th>Status</th><th>Review action</th></tr></thead><tbody>
+                <?php if (!empty($classSetRequests)): foreach ($classSetRequests as $request): ?>
+                <tr><td><?=htmlspecialchars($request['teacher_name'] ?? 'Teacher')?></td><td><strong><?=htmlspecialchars($request['book_title'] ?? 'Untitled')?></strong></td><td><?=intval($request['copies_requested'] ?? 0)?></td><td><?=htmlspecialchars(trim(($request['grade_level'] ?? '') . ' ' . ($request['class_section'] ?? '')))?></td><td><?=htmlspecialchars(($request['needed_from'] ?? '—') . ' → ' . ($request['needed_until'] ?? '—'))?></td><td><?=htmlspecialchars($request['purpose'] ?? '')?></td><td><span class="status <?=in_array(($request['status'] ?? 'Pending'), ['Approved','Ready'], true) ? 'success' : ((($request['status'] ?? '') === 'Rejected') ? 'danger' : 'pending')?>"><?=htmlspecialchars($request['status'] ?? 'Pending')?></span></td><td>
+                <?php if (in_array(($request['status'] ?? 'Pending'), ['Pending','Under Review'], true)): ?>
+                <form method="post" action="librarian_dashboard.php?section=requests" class="request-review-form"><input type="hidden" name="csrf_token" value="<?=htmlspecialchars($librarianCsrf)?>"><input type="hidden" name="request_action" value="review_class_set"><input type="hidden" name="request_id" value="<?=htmlspecialchars($request['id'] ?? '')?>"><select name="status"><option value="Approved">Approve</option><option value="Ready">Ready for pickup</option><option value="Rejected">Reject</option></select><input name="review_notes" placeholder="Optional note"><button type="submit" class="btn-add">Save</button></form>
+                <?php else: ?><span class="subtle">Reviewed</span><?php endif; ?></td></tr>
+                <?php endforeach; else: ?><tr><td colspan="8" class="empty-state">No teacher class-set requests have been submitted.</td></tr><?php endif; ?>
+                </tbody></table></div>
+            </div>
+            <?php elseif ($section === 'notifications'): ?>
+            <div class="book-management"><div class="section-header"><div><h1>Notifications</h1><p>Updates for teacher requests and library activity.</p></div><span class="status pending"><?=count($unreadLibrarianNotifications)?> unread</span></div>
+            <?php if (!empty($librarianNotifications)): foreach ($librarianNotifications as $notification): ?><div class="librarian-notice <?=empty($notification['is_read']) ? 'unread' : ''?>"><div><strong><?=htmlspecialchars($notification['title'] ?? 'Library notification')?></strong><p><?=htmlspecialchars($notification['message'] ?? '')?></p><small><?=htmlspecialchars($notification['created_at'] ?? '')?></small></div><?php if (empty($notification['is_read'])): ?><form method="post" action="librarian_dashboard.php?section=notifications"><input type="hidden" name="csrf_token" value="<?=htmlspecialchars($librarianCsrf)?>"><input type="hidden" name="request_action" value="mark_notification_read"><input type="hidden" name="notification_id" value="<?=htmlspecialchars($notification['id'] ?? '')?>"><button class="btn-add">Mark read</button></form><?php else: ?><span class="status success">Read</span><?php endif; ?></div><?php endforeach; else: ?><div class="empty-state">No notifications yet.</div><?php endif; ?></div>
             <?php elseif ($section === 'books'): ?>
             <div class="book-management">
                 <div class="section-header">
@@ -1462,9 +1534,10 @@ function hasValidCoverImage($coverImage) {
                 <div class="search-bar">
                     <div class="search-input-wrapper">
                         <span class="search-icon">⌕</span>
-                        <input type="text" id="bookSearch" placeholder="Search books by title, author, or ISBN..." 
-                               value="<?php echo htmlspecialchars($searchTerm); ?>"
-                               onkeyup="searchBooks(this.value)">
+                        <input type="text" id="bookSearch" placeholder="Search books by title, author, ISBN, or keyword..." 
+                               value="<?php echo htmlspecialchars($searchTerm); ?>" autocomplete="off"
+                               oninput="getLibrarianPredictions(this.value); searchBooks(this.value)" onkeydown="handleLibrarianPredictionKey(event, this.value)">
+                        <div class="predictive-results" id="librarianPredictiveResults"></div>
                     </div>
                 </div>
 
@@ -1726,6 +1799,12 @@ function hasValidCoverImage($coverImage) {
                         <input type="hidden" name="section" value="borrowings">
                         <input type="hidden" name="action" value="return">
                         <input type="hidden" name="id" id="returnBorrowingId" value="">
+                        <label style="display:block;margin:14px 0 8px;font-size:13px;font-weight:600;">Book condition</label>
+                        <select name="issue" style="width:100%;padding:10px;border:1px solid #ead7e5;border-radius:8px;margin-bottom:12px;">
+                            <option value="none">Returned in acceptable condition</option>
+                            <option value="damaged">Damaged — apply damaged-book fee</option>
+                            <option value="lost">Lost / not returned — apply lost-book fee</option>
+                        </select>
                         <div class="modal-actions">
                             <button type="button" class="btn-cancel" onclick="closeModal('returnConfirmModal')">Cancel</button>
                             <button type="submit" class="btn-confirm">Yes, Return Book</button>
@@ -1904,6 +1983,9 @@ function hasValidCoverImage($coverImage) {
         });
 
         let searchTimeout;
+        let librarianPredictionTimer = null;
+        let librarianPredictionRequest = 0;
+        let librarianPredictionItems = [];
         function searchBooks(query) {
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(function() {
@@ -1914,8 +1996,42 @@ function hasValidCoverImage($coverImage) {
                     url.searchParams.delete('search');
                 }
                 window.location.href = url.toString();
-            }, 400);
+            }, 1000);
         }
+
+        async function getLibrarianPredictions(query) {
+            const box = document.getElementById('librarianPredictiveResults');
+            if (!box) return;
+            clearTimeout(librarianPredictionTimer);
+            if (query.trim().length < 2) { box.classList.remove('visible'); box.innerHTML=''; return; }
+            librarianPredictionTimer = setTimeout(async () => {
+                const requestId = ++librarianPredictionRequest;
+                box.innerHTML = '<div class="predictive-item">Checking stored library books...</div>';
+                box.classList.add('visible');
+                try {
+                    const res = await fetch('../../../api/predict_search.php',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},body:JSON.stringify({partial_query:query.trim()})});
+                    const data = await res.json();
+                    if (requestId !== librarianPredictionRequest) return;
+                    if (!res.ok || data.success !== true) throw new Error(data.message || 'Search failed');
+                    librarianPredictionItems = Array.isArray(data.predictions) ? data.predictions : [];
+                    box.innerHTML = '';
+                    if (!librarianPredictionItems.length) { box.innerHTML='<div class="predictive-item">No matching books found in the system.</div>'; return; }
+                    librarianPredictionItems.forEach(book => {
+                        const btn=document.createElement('button');btn.type='button';btn.className='predictive-item';
+                        const score=document.createElement('span');score.className='pred-score';const availableCount=Number(book.available_count ?? book.available ?? 0);score.textContent=book.availability_label||(availableCount>0?availableCount+' available':'Unavailable');
+                        const title=document.createElement('div');title.className='pred-title';title.textContent=book.title;
+                        const author=document.createElement('div');author.className='pred-author';author.textContent='by '+(book.author||'Unknown author');
+                        const badge=document.createElement('span');badge.className='pred-badge';badge.textContent=book.category||'Uncategorized';
+                        btn.append(score,title,author,badge);btn.addEventListener('click',()=>{const input=document.getElementById('bookSearch');input.value=book.title;box.classList.remove('visible');searchBooks(book.title);});box.appendChild(btn);
+                    });
+                } catch(err) { if(requestId!==librarianPredictionRequest)return; console.error(err);box.innerHTML='<div class="predictive-item">Suggestions unavailable. You can still search.</div>'; }
+            }, 220);
+        }
+        function handleLibrarianPredictionKey(event, query) {
+            if (event.key === 'Escape') { const box=document.getElementById('librarianPredictiveResults');if(box)box.classList.remove('visible'); }
+            if (event.key === 'Enter') { event.preventDefault(); const box=document.getElementById('librarianPredictiveResults');if(box)box.classList.remove('visible'); clearTimeout(searchTimeout); searchBooks(query); }
+        }
+        document.addEventListener('click',function(event){const box=document.getElementById('librarianPredictiveResults');const input=document.getElementById('bookSearch');if(box&&input&&!box.contains(event.target)&&event.target!==input)box.classList.remove('visible');});
 
         function openModal(id) {
             document.getElementById(id).classList.add('active');

@@ -45,9 +45,12 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     return json_decode($response, true);
 }
 
+require_once dirname(__DIR__) . '/loan_policy_notifications.php';
+
 $section = isset($_GET['section']) ? $_GET['section'] : 'dashboard';
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 $userId = $_SESSION['user_id'];
+try { libraryGenerateDueNotices($userId, 'student_dashboard.php'); } catch (Throwable $e) { error_log($e->getMessage()); }
 
 $books = [];
 $borrowings = [];
@@ -251,10 +254,11 @@ if ($section === 'search' && $action === 'borrow' && isset($_GET['book_id'])) {
             'book_id' => $bookId,
             'user_id' => $userId,
             'borrow_date' => date('Y-m-d'),
-            'due_date' => date('Y-m-d', strtotime('+14 days')),
+            'due_date' => date('Y-m-d', strtotime('+' . libraryLoanPolicy($_SESSION['role'] ?? 'student')['days'] . ' days')),
             'status' => 'Borrowed'
         ];
         supabaseRequest('borrowings', 'POST', $borrowData);
+        libraryCreateBorrowNotice($userId, $bookCheck[0]['title'] ?? 'the book', libraryLoanPolicy($_SESSION['role'] ?? 'student')['days'], $borrowData['due_date']);
         supabaseRequest('books?id=eq.' . $bookId, 'PATCH', ['available' => ($bookCheck[0]['available'] - 1)]);
         
         if (!empty($approvedRequests)) {
@@ -300,10 +304,11 @@ if ($section === 'requests' && $action === 'borrow' && isset($_GET['book_id'])) 
             'book_id' => $bookId,
             'user_id' => $userId,
             'borrow_date' => date('Y-m-d'),
-            'due_date' => date('Y-m-d', strtotime('+14 days')),
+            'due_date' => date('Y-m-d', strtotime('+' . libraryLoanPolicy($_SESSION['role'] ?? 'student')['days'] . ' days')),
             'status' => 'Borrowed'
         ];
         supabaseRequest('borrowings', 'POST', $borrowData);
+        libraryCreateBorrowNotice($userId, $bookCheck[0]['title'] ?? 'the book', libraryLoanPolicy($_SESSION['role'] ?? 'student')['days'], $borrowData['due_date']);
         supabaseRequest('books?id=eq.' . $bookId, 'PATCH', ['available' => ($bookCheck[0]['available'] - 1)]);
         supabaseRequest('book_requests?id=eq.' . $approvedRequests[0]['id'], 'PATCH', ['status' => 'Fulfilled']);
 
@@ -1666,29 +1671,12 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
         }
 
         function basicSearchFallback(query, books) {
-            const q = query.toLowerCase();
-            const words = q.split(' ').filter(w => w.length > 2);
-
-            return books.map(book => {
-                let score = 0;
-                const title = (book.title || '').toLowerCase();
-                const author = (book.author || '').toLowerCase();
-                const desc = (book.description || '').toLowerCase();
-
-                if (title.includes(q)) score += 50;
-                if (author.includes(q)) score += 30;
-                if (desc.includes(q)) score += 20;
-                
-                words.forEach(w => {
-                    if (title.includes(w)) score += 10;
-                    if (author.includes(w)) score += 5;
-                    if (desc.includes(w)) score += 3;
-                });
-
-                return { ...book, relevance: Math.min(score, 100) };
-            })
-            .filter(b => b.relevance > 0)
-            .sort((a, b) => b.relevance - a.relevance);
+            if (window.aiFunctions && typeof window.aiFunctions.basicSearch === 'function') return window.aiFunctions.basicSearch(query, books);
+            const stop = new Set('ang mga ng na sa si kay kina at o or and the a an of for about tungkol libro aklat book books hanap hanapin naghahanap maghanap gusto ko ako po ba may mayroon meron please find search show me looking want need give'.split(/\s+/));
+            const syn = {programasyon:['programming','program','coding'],programming:['program','coding'],paghahack:['hacking','hack'],hacking:['hack','hacker','cybersecurity'],hack:['hacking','cybersecurity'],kasaysayan:['history'],agham:['science'],matematika:['math','mathematics'],panitikan:['literature'],teknolohiya:['technology'],kalikasan:['nature','environment']};
+            const terms = new Set();
+            String(query||'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').split(/\s+/).forEach(w=>{if(w.length>1&&!stop.has(w)){terms.add(w);(syn[w]||[]).forEach(x=>terms.add(x));}});
+            return (books||[]).map(book=>{const fields={title:String(book.title||'').toLowerCase(),author:String(book.author||'').toLowerCase(),description:String(book.description||'').toLowerCase(),keywords:String(book.keywords||'').toLowerCase(),category:String(book.categories?.name||book.category||'').toLowerCase()};let relevance=0,matched=0;const weights={title:24,keywords:18,category:14,description:10,author:8};terms.forEach(term=>{let best=0;Object.keys(fields).forEach(k=>{if(fields[k].includes(term))best=Math.max(best,weights[k]);});if(best){relevance+=best+12;matched++;}});if(matched===terms.size&&matched)relevance+=30;return {...book,relevance:Math.min(100,relevance),matched_terms:matched};}).filter(b=>b.relevance>0).sort((a,b)=>(b.matched_terms-a.matched_terms)||(b.relevance-a.relevance));
         }
 
         function renderSearchResults(books) {
@@ -1776,50 +1764,56 @@ if ($basePath === '/' || $basePath === '\\' || $basePath === '.') $basePath = ''
             }
         });
 
+        let predictionRequestId = 0;
         async function getPredictions(query) {
             const container = document.getElementById('predictiveResults');
-            if (!container) return;
-
-            if (!window.firebaseServices || !window.firebaseServices.isReady || !window.aiFunctions || !window.aiFunctions.predictSearch) return;
-
-            container.innerHTML = '<div class="loading-predictions"><div class="spinner"></div> Predicting...</div>';
+            if (!container || query.trim().length < 2) return;
+            const requestId = ++predictionRequestId;
+            container.innerHTML = '<div class="loading-predictions"><div class="spinner"></div> Checking library catalog...</div>';
             container.classList.add('visible');
-
             try {
-                const predictions = await window.aiFunctions.predictSearch(
-                    query,
-                    userGradeLevel,
-                    userSubjects,
-                    userHistory
-                );
-
-                if (predictions && predictions.length > 0) {
-                    container.innerHTML = predictions.map(p => `
-                        <div class="predictive-item" onclick="selectPrediction('${escapeHtml(p.title).replace(/'/g, "\\'")}')">
-                            <span class="pred-score">${Math.round(p.prediction_score || 0)}%</span>
-                            <div class="pred-title">${escapeHtml(p.title)}</div>
-                            <div class="pred-author">by ${escapeHtml(p.author || 'Unknown')}</div>
-                            <span class="pred-badge">🎯 ${escapeHtml(p.category || 'General')}</span>
-                        </div>
-                    `).join('');
-                } else {
-                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#9a8a7e;">Keep typing...</div>';
+                const response = await fetch('../../../api/predict_search.php', {
+                    method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+                    body: JSON.stringify({partial_query: query.trim()})
+                });
+                const payload = await response.json();
+                if (requestId !== predictionRequestId) return;
+                const predictions = Array.isArray(payload.predictions) ? payload.predictions : [];
+                container.replaceChildren();
+                if (!response.ok || payload.success !== true) throw new Error(payload.message || 'Catalog suggestions unavailable');
+                if (!predictions.length) {
+                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#9a8a7e;">No matching books in the library catalog.</div>';
+                    return;
                 }
+                predictions.forEach(book => {
+                    const item = document.createElement('button'); item.type = 'button'; item.className = 'predictive-item';
+                    item.style.width = '100%'; item.style.textAlign = 'left'; item.style.border = '0'; item.style.background = 'transparent';
+                    const title = document.createElement('div'); title.className = 'pred-title'; title.textContent = book.title || 'Untitled';
+                    const author = document.createElement('div'); author.className = 'pred-author'; author.textContent = 'by ' + (book.author || 'Unknown author');
+                    const meta = document.createElement('span'); meta.className = 'pred-badge'; meta.textContent = (book.category || 'Uncategorized') + (book.isbn ? ' · ISBN ' + book.isbn : '');
+                    const availability = document.createElement('span'); availability.className = 'pred-score'; const availableCount = Number(book.available_count ?? book.available ?? 0); availability.textContent = book.availability_label || (availableCount > 0 ? availableCount + ' available' : 'Unavailable');
+                    item.append(availability, title, author, meta);
+                    item.addEventListener('click', () => selectPrediction(book.title));
+                    container.appendChild(item);
+                });
             } catch (error) {
-                console.error('Prediction error:', error);
-                container.innerHTML = '<div style="padding:16px;text-align:center;color:#9a8a7e;">Prediction unavailable</div>';
+                if (requestId !== predictionRequestId) return;
+                console.error('Catalog prediction error:', error);
+                container.innerHTML = '<div style="padding:16px;text-align:center;color:#9a8a7e;">Could not load suggestions. You can still search.</div>';
             }
         }
 
         function selectPrediction(title) {
-            document.getElementById('searchInput').value = title;
+            const input = document.getElementById('searchInput');
+            if (input) input.value = title;
             hidePredictions();
             performSearch();
         }
 
         function hidePredictions() {
+            predictionRequestId++;
             const container = document.getElementById('predictiveResults');
-            if (container) container.classList.remove('visible');
+            if (container) { container.classList.remove('visible'); container.innerHTML = ''; }
         }
 
         document.addEventListener('click', function(e) {

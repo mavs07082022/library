@@ -1,73 +1,76 @@
 <?php
-// api/track_click.php - Track when users click on book results
+// api/track_click.php - Record student clicks on catalog search results.
 
+if (session_status() !== PHP_SESSION_ACTIVE) {
+    session_start();
+}
 require_once __DIR__ . '/config.php';
 
-header('Content-Type: application/json');
+header('Content-Type: application/json; charset=utf-8');
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    jsonResponse(['error' => 'Method not allowed'], 405);
+    jsonResponse(['success' => false, 'error' => 'Method not allowed'], 405);
+}
+
+if (empty($_SESSION['user_id']) || ($_SESSION['role'] ?? '') !== 'student') {
+    jsonResponse(['success' => false, 'error' => 'Student login required'], 401);
 }
 
 $input = getInput();
-$userId = $input['user_id'] ?? null;
-$bookId = $input['book_id'] ?? null;
-$sessionId = $input['session_id'] ?? null;
-$query = $input['query'] ?? '';
+$userId = (string)$_SESSION['user_id'];
+$bookId = trim((string)($input['book_id'] ?? ''));
+$sessionId = trim((string)($input['session_id'] ?? ''));
+$query = trim((string)($input['query'] ?? ''));
 
-if (!$userId || !$bookId) {
-    jsonResponse(['error' => 'Missing required fields'], 400);
+if ($bookId === '' || $sessionId === '' || $query === '') {
+    jsonResponse(['success' => false, 'error' => 'Missing book ID, session ID, or query'], 400);
 }
 
 try {
-    if ($sessionId && $query) {
-        $sessions = supabaseRequest(
-            'search_sessions?select=id&user_id=eq.' . $userId . 
-            '&session_id=eq.' . $sessionId . 
-            '&query=eq.' . urlencode($query) . 
-            '&order=created_at.desc&limit=1'
-        );
-        
-        if (!empty($sessions)) {
-            $currentClicks = supabaseRequest(
-                'search_sessions?select=results_clicked&id=eq.' . $sessions[0]['id']
-            );
-            $newClicks = isset($currentClicks[0]) ? ($currentClicks[0]['results_clicked'] + 1) : 1;
-            
-            supabaseRequest(
-                'search_sessions?id=eq.' . $sessions[0]['id'],
-                'PATCH',
-                ['results_clicked' => $newClicks]
-            );
-        }
-    }
-    
-    $history = supabaseRequest(
-        'user_search_history?select=id,clicked_books&user_id=eq.' . $userId . 
-        '&query=eq.' . urlencode($query) . 
+    $encodedUserId = rawurlencode($userId);
+    $encodedSessionId = rawurlencode($sessionId);
+    $encodedQuery = rawurlencode($query);
+
+    $sessions = supabaseRequest(
+        'search_sessions?select=id,results_clicked&user_id=eq.' . $encodedUserId .
+        '&session_id=eq.' . $encodedSessionId .
+        '&query=eq.' . $encodedQuery .
         '&order=created_at.desc&limit=1'
     );
-    
+
+    if (!empty($sessions)) {
+        $newClicks = (int)($sessions[0]['results_clicked'] ?? 0) + 1;
+        supabaseRequest(
+            'search_sessions?id=eq.' . rawurlencode((string)$sessions[0]['id']),
+            'PATCH',
+            ['results_clicked' => $newClicks, 'abandoned' => false]
+        );
+    }
+
+    $history = supabaseRequest(
+        'user_search_history?select=id,clicked_books&user_id=eq.' . $encodedUserId .
+        '&query=eq.' . $encodedQuery .
+        '&order=created_at.desc&limit=1'
+    );
+
     if (!empty($history)) {
         $clickedBooks = $history[0]['clicked_books'] ?? [];
-        if (!in_array($bookId, $clickedBooks)) {
+        if (!is_array($clickedBooks)) $clickedBooks = [];
+        if (!in_array($bookId, array_map('strval', $clickedBooks), true)) {
             $clickedBooks[] = $bookId;
             supabaseRequest(
-                'user_search_history?id=eq.' . $history[0]['id'],
+                'user_search_history?id=eq.' . rawurlencode((string)$history[0]['id']),
                 'PATCH',
                 ['clicked_books' => $clickedBooks]
             );
         }
     }
-    
-    jsonResponse([
-        'success' => true,
-        'message' => 'Click tracked'
-    ]);
-    
+
+    jsonResponse(['success' => true, 'message' => 'Student result click recorded']);
 } catch (Exception $e) {
     jsonResponse([
         'success' => false,
-        'error' => $e->getMessage()
+        'error' => 'Click tracking could not be saved.',
     ], 500);
 }
+?>

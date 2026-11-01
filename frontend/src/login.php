@@ -45,7 +45,7 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
     return json_decode($response, true);
 }
 
-$error = '';
+$error = (($_GET['error'] ?? '') === 'invalid_role') ? 'This account has an unsupported role. Please contact the administrator.' : '';
 $success = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -76,21 +76,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['user_id'] = $user['id'];
                     $_SESSION['username'] = $user['username'];
                     $_SESSION['full_name'] = $user['full_name'];
-                    $_SESSION['role'] = $user['role'];
+                    $_SESSION['role'] = strtolower(trim((string)($user['role'] ?? '')));
                     $_SESSION['user_id_display'] = $user['user_id'];
                     $_SESSION['email'] = $user['email'];
                     $_SESSION['login_time'] = time();
                     
-                    // Redirect based on role
-                    $role = $user['role'];
-                    if ($role === 'admin') {
-                        header('Location: admin_dashboard.php');
-                    } elseif ($role === 'librarian') {
-                        header('Location: ./librarian/librarian_dashboard.php');
-                    } elseif ($role === 'student') {
-                        header('Location: ./students/student_dashboard.php');
-                    } else {
-                        header('Location: dashboard.php');
+                    // Normalize role values because older records may contain Teacher/TEACHER.
+                    $role = strtolower(trim((string)($user['role'] ?? '')));
+                    $_SESSION['role'] = $role;
+
+                    // Route only to a dashboard that exists for the account's role.
+                    switch ($role) {
+                        case 'admin':
+                            header('Location: admin_dashboard.php');
+                            break;
+                        case 'librarian':
+                            header('Location: ./librarian/librarian_dashboard.php');
+                            break;
+                        case 'student':
+                            header('Location: ./students/student_dashboard.php');
+                            break;
+                        case 'teacher':
+                            header('Location: ./teacher/teacher_dashboard.php');
+                            break;
+                        default:
+                            // Do not send unknown roles to a generic homepage/dashboard.
+                            $_SESSION = [];
+                            session_destroy();
+                            header('Location: login.php?error=invalid_role');
+                            break;
                     }
                     exit;
                 }
