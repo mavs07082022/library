@@ -1,0 +1,115 @@
+/*
+ * St. Agnes Academy LMS — cross-dashboard theme and profile styles
+ * Include after existing dashboard stylesheets.
+ * Works with body[data-theme="dark"], body.dark-mode, and .dark-mode.
+ */
+:root {
+  color-scheme: light;
+  --sa-bg: #f6f3f8;
+  --sa-surface: #ffffff;
+  --sa-surface-2: #fbf7fc;
+  --sa-text: #211824;
+  --sa-muted: #675b6b;
+  --sa-border: #e6dce9;
+  --sa-input: #ffffff;
+  --sa-input-text: #211824;
+  --sa-accent: #c20b82;
+  --sa-accent-hover: #a50970;
+  --sa-shadow: 0 8px 28px rgba(39, 14, 38, .08);
+}
+:root:has(body[data-theme="dark"]),
+body[data-theme="dark"],
+body.dark-mode,
+html.dark-mode {
+  color-scheme: dark;
+  --sa-bg: #111016;
+  --sa-surface: #1c1921;
+  --sa-surface-2: #25202b;
+  --sa-text: #f5eff8;
+  --sa-muted: #c0b5c8;
+  --sa-border: #403447;
+  --sa-input: #25202b;
+  --sa-input-text: #f5eff8;
+  --sa-accent: #ec28a8;
+  --sa-accent-hover: #ff54c0;
+  --sa-shadow: 0 8px 28px rgba(0, 0, 0, .28);
+}
+body[data-theme="dark"], body.dark-mode, html.dark-mode {
+  background-color: var(--sa-bg) !important;
+  color: var(--sa-text) !important;
+}
+body[data-theme="dark"] :is(main, .main-content, .content, .dashboard-content, .student-content, .librarian-content, .admin-content, .teacher-content),
+body.dark-mode :is(main, .main-content, .content, .dashboard-content, .student-content, .librarian-content, .admin-content, .teacher-content) {
+  color: var(--sa-text);
+}
+body[data-theme="dark"] :is(.card, .panel, .content-card, .stat-card, .profile-edit-panel, .profile-account-summary > div, .modal-box, .modal-content, .admin-profile-modal, .profile-container),
+body.dark-mode :is(.card, .panel, .content-card, .stat-card, .profile-edit-panel, .profile-account-summary > div, .modal-box, .modal-content, .admin-profile-modal, .profile-container) {
+  background: var(--sa-surface) !important;
+  color: var(--sa-text) !important;
+  border-color: var(--sa-border) !important;
+  box-shadow: var(--sa-shadow);
+}
+body[data-theme="dark"] :is(h1,h2,h3,h4,h5,p,label,small,strong,span,li,td,th,legend),
+body.dark-mode :is(h1,h2,h3,h4,h5,p,label,small,strong,span,li,td,th,legend) {
+  color: inherit;
+}
+body[data-theme="dark"] :is(.muted,.subtle,.text-muted,.description,.helper-text),
+body.dark-mode :is(.muted,.subtle,.text-muted,.description,.helper-text) {
+  color: var(--sa-muted) !important;
+}
+body[data-theme="dark"] :is(input,select,textarea),
+body.dark-mode :is(input,select,textarea) {
+  background: var(--sa-input) !important;
+  color: var(--sa-input-text) !important;
+  border-color: var(--sa-border) !important;
+}
+body[data-theme="dark"] input::placeholder,
+body.dark-mode input::placeholder,
+body[data-theme="dark"] textarea::placeholder,
+body.dark-mode textarea::placeholder { color: var(--sa-muted) !important; opacity: 1; }
+body[data-theme="dark"] :is(table,thead,tbody,tr),
+body.dark-mode :is(table,thead,tbody,tr) { background-color: transparent; color: var(--sa-text); }
+body[data-theme="dark"] :is(th,td),
+body.dark-mode :is(th,td) { border-color: var(--sa-border) !important; }
+body[data-theme="dark"] a:not(.btn):not(.header-action),
+body.dark-mode a:not(.btn):not(.header-action) { color: #ff75ce; }
+body[data-theme="dark"] :is(button,.btn),
+body.dark-mode :is(button,.btn) { color: inherit; }
+body[data-theme="dark"] :is(.btn-primary,.primary-btn,.submit-btn),
+body.dark-mode :is(.btn-primary,.primary-btn,.submit-btn) {
+  background: var(--sa-accent) !important; color: #fff !important; border-color: transparent !important;
+}
+body[data-theme="dark"] :is(.dropdown-menu,.popover,.notification-dropdown),
+body.dark-mode :is(.dropdown-menu,.popover,.notification-dropdown) {
+  background: var(--sa-surface) !important; color: var(--sa-text) !important; border-color: var(--sa-border) !important;
+}
+
+/* Profile controls shared across all role dashboards */
+.sa-profile-avatar {
+  width: 104px; height: 104px; border-radius: 50%; object-fit: cover;
+  border: 3px solid rgba(255,255,255,.75); background: #312633;
+  box-shadow: 0 5px 18px rgba(0,0,0,.16);
+}
+.sa-profile-avatar--small { width: 64px; height: 64px; }
+.sa-profile-upload { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; }
+.sa-profile-upload input[type=file] { max-width: 100%; }
+.sa-profile-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; }
+.sa-profile-form .full-width { grid-column: 1 / -1; }
+.sa-profile-form label { display: block; font-weight: 650; margin-bottom: 6px; color: var(--sa-text); }
+.sa-profile-form :is(input,textarea,select) {
+  width: 100%; min-height: 42px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--sa-border); background: var(--sa-input); color: var(--sa-input-text);
+}
+.sa-profile-form textarea { min-height: 96px; resize: vertical; }
+.sa-profile-form :is(input,textarea,select):focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--sa-accent) 28%, transparent);
+  border-color: var(--sa-accent);
+}
+.sa-profile-save { display: inline-flex; justify-content: center; align-items: center; gap: 8px;
+  border: 0; border-radius: 10px; padding: 11px 20px; background: var(--sa-accent); color: white;
+  font-weight: 700; cursor: pointer; }
+.sa-profile-save:hover { background: var(--sa-accent-hover); }
+@media (max-width: 620px) { .sa-profile-form { grid-template-columns: 1fr; } .sa-profile-form .full-width { grid-column: auto; } }
+
+/* Keep the teacher circular-gradient hero; remove accidental second hero */
+.teacher-profile-welcome-hero { display: none !important; }

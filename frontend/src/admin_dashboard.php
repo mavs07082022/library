@@ -56,68 +56,40 @@ function supabaseRequest($endpoint, $method = 'GET', $data = null) {
 
 require_once __DIR__ . '/loan_policy_notifications.php';
 
-/**
- * Determine if a borrowing is overdue based on current date (Asia/Manila).
- */
 function computeBorrowingStatus($borrowing) {
     $status = $borrowing['status'] ?? 'Borrowed';
-    if ($status === 'Returned') {
-        return 'Returned';
-    }
+    if ($status === 'Returned') { return 'Returned'; }
     $dueDate = $borrowing['due_date'] ?? null;
     if ($dueDate) {
         $dueTimestamp = strtotime($dueDate);
         $today = strtotime(date('Y-m-d'));
-        if ($dueTimestamp !== false && $dueTimestamp < $today) {
-            return 'Overdue';
-        }
+        if ($dueTimestamp !== false && $dueTimestamp < $today) { return 'Overdue'; }
     }
     return $status;
 }
 
-/**
- * Auto-detect the base path where firebase_config.js and ai_functions.js live.
- * Walks up the directory tree from the current script location.
- */
 function detectBasePath() {
-    $scriptDir = dirname($_SERVER['SCRIPT_NAME']); // e.g. /update-libV2_V2/frontend/src
+    $scriptDir = dirname($_SERVER['SCRIPT_NAME']);
     $docRoot = rtrim(str_replace('\\', '/', $_SERVER['DOCUMENT_ROOT']), '/');
-    
     $searchDir = $scriptDir;
-    
     for ($i = 0; $i < 8; $i++) {
         $checkDir = rtrim(str_replace('\\', '/', $searchDir), '/');
         if ($checkDir === '/' || $checkDir === '\\' || $checkDir === '.') $checkDir = '';
-        
         $fsPath = $docRoot . $checkDir . '/firebase_config.js';
-        
-        if (file_exists($fsPath)) {
-            return $checkDir;
-        }
-        
+        if (file_exists($fsPath)) { return $checkDir; }
         $parent = dirname($searchDir);
-        if ($parent === $searchDir || $parent === '/' || $parent === '\\' || $parent === '.') {
-            break;
-        }
+        if ($parent === $searchDir || $parent === '/' || $parent === '\\' || $parent === '.') { break; }
         $searchDir = $parent;
     }
-    
-    // Fallback: known deployment path
-    $knownPaths = [
-        '/update-libV2_V2',
-        '/mavs07082022-library',
-        '',
-    ];
+    $knownPaths = ['/update-libV2_V2', '/mavs07082022-library', ''];
     foreach ($knownPaths as $p) {
         $fsPath = $docRoot . $p . '/firebase_config.js';
         if (file_exists($fsPath)) return $p;
     }
-    
     return '';
 }
 
 $basePath = detectBasePath();
-
 $section = isset($_GET['section']) ? $_GET['section'] : 'dashboard';
 $action = isset($_GET['action']) ? $_GET['action'] : '';
 
@@ -129,7 +101,6 @@ $requestFilterStatus = isset($_GET['request_filter']) ? $_GET['request_filter'] 
 
 try {
     $requestsRaw = supabaseRequest('book_requests?select=*');
-    
     $bookRequests = [];
     if (is_array($requestsRaw) && !empty($requestsRaw)) {
         foreach ($requestsRaw as $r) {
@@ -144,17 +115,13 @@ try {
                     }
                 }
             } catch (Exception $e) {}
-            
             $userFullName = 'Unknown User';
             try {
                 if (!empty($r['user_id'])) {
                     $userData = supabaseRequest('users?select=full_name,user_id,username&id=eq.' . $r['user_id']);
-                    if (!empty($userData)) {
-                        $userFullName = $userData[0]['full_name'] ?? 'Unknown User';
-                    }
+                    if (!empty($userData)) { $userFullName = $userData[0]['full_name'] ?? 'Unknown User'; }
                 }
             } catch (Exception $e) {}
-            
             $bookRequests[] = [
                 'id' => $r['id'] ?? null,
                 'user_id' => $r['user_id'] ?? null,
@@ -176,19 +143,13 @@ try {
             ];
         }
     }
-    
-    $pendingRequests = array_filter($bookRequests, function($r) {
-        return ($r['status'] ?? '') === 'Pending';
-    });
+    $pendingRequests = array_filter($bookRequests, function($r) { return ($r['status'] ?? '') === 'Pending'; });
 } catch (Exception $e) {
     error_log('Error fetching requests: ' . $e->getMessage());
 }
 
-// Filter requests
 $filteredRequests = array_filter($bookRequests, function($r) use ($requestSearchTerm, $requestFilterStatus) {
-    if ($requestFilterStatus !== 'all' && ($r['status'] ?? '') !== $requestFilterStatus) {
-        return false;
-    }
+    if ($requestFilterStatus !== 'all' && ($r['status'] ?? '') !== $requestFilterStatus) { return false; }
     if (empty($requestSearchTerm)) return true;
     $search = strtolower($requestSearchTerm);
     return strpos(strtolower($r['full_name'] ?? ''), $search) !== false ||
@@ -203,20 +164,11 @@ if ($section === 'requests' && isset($_GET['action'])) {
     $requestId = isset($_GET['id']) ? $_GET['id'] : '';
     $adminId = $_SESSION['user_id'];
     $notes = isset($_GET['notes']) ? $_GET['notes'] : '';
-    
     if (($action === 'approve' || $action === 'reject') && $requestId) {
         try {
             $status = $action === 'approve' ? 'Approved' : 'Rejected';
-            
-            $updateData = [
-                'status' => $status,
-                'verified_by' => $adminId,
-                'verification_date' => date('Y-m-d H:i:s'),
-                'verification_notes' => $notes
-            ];
-            
+            $updateData = ['status' => $status, 'verified_by' => $adminId, 'verification_date' => date('Y-m-d H:i:s'), 'verification_notes' => $notes];
             supabaseRequest('book_requests?id=eq.' . $requestId, 'PATCH', $updateData);
-            
             $requestData = supabaseRequest('book_requests?select=*&id=eq.' . $requestId);
             if (!empty($requestData)) {
                 $req = $requestData[0];
@@ -224,12 +176,9 @@ if ($section === 'requests' && isset($_GET['action'])) {
                 try {
                     if (!empty($req['book_id'])) {
                         $bookInfo = supabaseRequest('books?select=title&id=eq.' . $req['book_id']);
-                        if (!empty($bookInfo)) {
-                            $bookTitle = $bookInfo[0]['title'] ?? 'Book';
-                        }
+                        if (!empty($bookInfo)) { $bookTitle = $bookInfo[0]['title'] ?? 'Book'; }
                     }
                 } catch (Exception $e) {}
-                
                 $notifData = [
                     'user_id' => $req['user_id'],
                     'title' => 'Request ' . $status,
@@ -242,7 +191,6 @@ if ($section === 'requests' && isset($_GET['action'])) {
                 ];
                 supabaseRequest('notifications', 'POST', $notifData);
             }
-            
             header('Location: admin_dashboard.php?section=requests&msg=Request ' . strtolower($status) . ' successfully');
             exit;
         } catch (Exception $e) {
@@ -258,157 +206,82 @@ if ($section === 'books' && $action === 'export' && isset($_GET['format'])) {
         $books = supabaseRequest('books?select=*');
         $categories = supabaseRequest('categories?select=*');
         $catMap = [];
-        foreach ($categories as $cat) {
-            $catMap[$cat['id']] = $cat['name'];
-        }
-        
+        foreach ($categories as $cat) { $catMap[$cat['id']] = $cat['name']; }
         $exportData = [];
         foreach ($books as $b) {
             $exportData[] = [
-                'Title' => $b['title'] ?? 'N/A',
-                'Author' => $b['author'] ?? 'N/A',
-                'ISBN' => $b['isbn'] ?? 'N/A',
-                'Publisher' => $b['publisher'] ?? 'N/A',
+                'Title' => $b['title'] ?? 'N/A', 'Author' => $b['author'] ?? 'N/A',
+                'ISBN' => $b['isbn'] ?? 'N/A', 'Publisher' => $b['publisher'] ?? 'N/A',
                 'Year' => $b['year_published'] ?? 'N/A',
                 'Category' => isset($b['category_id']) && isset($catMap[$b['category_id']]) ? $catMap[$b['category_id']] : 'Uncategorized',
-                'Quantity' => $b['quantity'] ?? 0,
-                'Available' => $b['available'] ?? 0,
+                'Quantity' => $b['quantity'] ?? 0, 'Available' => $b['available'] ?? 0,
                 'Location' => $b['location'] ?? 'N/A'
             ];
         }
-        
         if ($_GET['format'] === 'pdf') {
             while (ob_get_level()) { ob_end_clean(); }
-            error_reporting(0);
-            ini_set('display_errors', 0);
-            
-            if (!class_exists('FPDF')) {
-                $fpdfTry = __DIR__ . '/fpdf.php';
-                if (file_exists($fpdfTry)) {
-                    require_once($fpdfTry);
-                }
-            }
-            
-            if (!class_exists('FPDF')) {
-                header('Content-Type: text/plain; charset=utf-8');
-                echo "PDF export failed: FPDF library not loaded.\n";
-                exit;
-            }
-            
-            if (empty($exportData)) {
-                header('Content-Type: text/plain; charset=utf-8');
-                echo "PDF export failed: No book data to export.";
-                exit;
-            }
-            
+            error_reporting(0); ini_set('display_errors', 0);
+            if (!class_exists('FPDF')) { $fpdfTry = __DIR__ . '/fpdf.php'; if (file_exists($fpdfTry)) { require_once($fpdfTry); } }
+            if (!class_exists('FPDF')) { header('Content-Type: text/plain; charset=utf-8'); echo "PDF export failed: FPDF library not loaded.\n"; exit; }
+            if (empty($exportData)) { header('Content-Type: text/plain; charset=utf-8'); echo "PDF export failed: No book data to export."; exit; }
             try {
                 $pdf = new FPDF('L', 'mm', 'A4');
-                $pdf->SetCompression(false);
-                $pdf->AddPage();
-                
+                $pdf->SetCompression(false); $pdf->AddPage();
                 $primaryColor = array(180, 15, 125);
-                
                 $pdf->SetFont('Arial', 'B', 20);
                 $pdf->SetTextColor($primaryColor[0], $primaryColor[1], $primaryColor[2]);
                 $pdf->Cell(0, 15, 'Book Inventory Report', 0, 1, 'C');
-                
-                $pdf->SetFont('Arial', '', 11);
-                $pdf->SetTextColor(80, 80, 80);
+                $pdf->SetFont('Arial', '', 11); $pdf->SetTextColor(80, 80, 80);
                 $pdf->Cell(0, 8, 'Generated: ' . date('F j, Y g:i A'), 0, 1, 'C');
                 $pdf->Cell(0, 8, 'Total Books: ' . count($exportData), 0, 1, 'C');
                 $pdf->Ln(8);
-                
                 $pdf->SetFont('Arial', 'B', 10);
                 $pdf->SetFillColor($primaryColor[0], $primaryColor[1], $primaryColor[2]);
                 $pdf->SetTextColor(255, 255, 255);
-                
                 $headers = array_keys($exportData[0]);
                 $colWidths = [30, 30, 25, 30, 15, 25, 18, 18, 20];
-                $totalWidth = array_sum($colWidths);
-                $pageWidth = 270;
-                $startX = ($pageWidth - $totalWidth) / 2;
-                $pdf->SetX($startX);
-                
-                $cleanHeaders = array_map(function($h) {
-                    return preg_replace('/[^\x20-\x7E]/', '', (string)$h);
-                }, $headers);
-                
-                foreach ($cleanHeaders as $i => $header) {
-                    $pdf->Cell($colWidths[$i] ?? 20, 9, $header, 1, 0, 'C', 1);
-                }
+                $totalWidth = array_sum($colWidths); $pageWidth = 270; $startX = ($pageWidth - $totalWidth) / 2; $pdf->SetX($startX);
+                $cleanHeaders = array_map(function($h) { return preg_replace('/[^\x20-\x7E]/', '', (string)$h); }, $headers);
+                foreach ($cleanHeaders as $i => $header) { $pdf->Cell($colWidths[$i] ?? 20, 9, $header, 1, 0, 'C', 1); }
                 $pdf->Ln();
-                
-                $pdf->SetFont('Arial', '', 8);
-                $pdf->SetTextColor(0, 0, 0);
-                $fill = false;
-                $rowCount = 0;
-                
+                $pdf->SetFont('Arial', '', 8); $pdf->SetTextColor(0, 0, 0); $fill = false; $rowCount = 0;
                 foreach ($exportData as $row) {
                     $rowData = array_values($row);
                     $pdf->SetX($startX);
-                    $pdf->SetFillColor(
-                        $fill ? 240 : 255,
-                        $fill ? 244 : 255,
-                        $fill ? 248 : 255
-                    );
+                    $pdf->SetFillColor($fill ? 240 : 255, $fill ? 244 : 255, $fill ? 248 : 255);
                     foreach ($rowData as $i => $cell) {
                         $cleanCell = preg_replace('/[^\x20-\x7E]/', '', (string)$cell);
                         $pdf->Cell($colWidths[$i] ?? 20, 7, substr($cleanCell, 0, 25), 1, 0, 'L', true);
                     }
-                    $pdf->Ln();
-                    $fill = !$fill;
-                    $rowCount++;
-                    
+                    $pdf->Ln(); $fill = !$fill; $rowCount++;
                     if ($rowCount % 25 == 0) {
                         $pdf->AddPage();
                         $pdf->SetFont('Arial', 'B', 10);
                         $pdf->SetFillColor($primaryColor[0], $primaryColor[1], $primaryColor[2]);
-                        $pdf->SetTextColor(255, 255, 255);
-                        $pdf->SetX($startX);
-                        foreach ($cleanHeaders as $i => $header) {
-                            $pdf->Cell($colWidths[$i] ?? 20, 9, $header, 1, 0, 'C', 1);
-                        }
-                        $pdf->Ln();
-                        $pdf->SetFont('Arial', '', 8);
-                        $pdf->SetTextColor(0, 0, 0);
-                        $fill = false;
+                        $pdf->SetTextColor(255, 255, 255); $pdf->SetX($startX);
+                        foreach ($cleanHeaders as $i => $header) { $pdf->Cell($colWidths[$i] ?? 20, 9, $header, 1, 0, 'C', 1); }
+                        $pdf->Ln(); $pdf->SetFont('Arial', '', 8); $pdf->SetTextColor(0, 0, 0); $fill = false;
                     }
                 }
-                
                 while (ob_get_level()) { ob_end_clean(); }
-                
                 $pdf->Output('D', 'books_export_' . date('Y-m-d') . '.pdf');
                 exit;
-                
-            } catch (Exception $e) {
-                header('Content-Type: text/plain; charset=utf-8');
-                echo "PDF generation error: " . $e->getMessage();
-                exit;
-            }
-            
+            } catch (Exception $e) { header('Content-Type: text/plain; charset=utf-8'); echo "PDF generation error: " . $e->getMessage(); exit; }
         } elseif ($_GET['format'] === 'excel') {
             header('Content-Type: application/vnd.ms-excel');
             header('Content-Disposition: attachment; filename="books_export_' . date('Y-m-d') . '.xls"');
             echo '<table border="1"><tr style="background:#b40f7d;color:white;">';
-            foreach (array_keys($exportData[0]) as $header) {
-                echo '<th style="padding:8px;">' . preg_replace('/[^\x20-\x7E]/', '', $header) . '</th>';
-            }
+            foreach (array_keys($exportData[0]) as $header) { echo '<th style="padding:8px;">' . preg_replace('/[^\x20-\x7E]/', '', $header) . '</th>'; }
             echo '</tr>';
             foreach ($exportData as $row) {
                 echo '<tr>';
-                foreach ($row as $cell) {
-                    echo '<td style="padding:8px;">' . htmlspecialchars(preg_replace('/[^\x20-\x7E]/', '', $cell)) . '</td>';
-                }
+                foreach ($row as $cell) { echo '<td style="padding:8px;">' . htmlspecialchars(preg_replace('/[^\x20-\x7E]/', '', $cell)) . '</td>'; }
                 echo '</tr>';
             }
             echo '</table>';
             exit;
         }
-        
-    } catch (Exception $e) {
-        echo 'Export error: ' . $e->getMessage();
-        exit;
-    }
+    } catch (Exception $e) { echo 'Export error: ' . $e->getMessage(); exit; }
 }
 
 // ===== REPORTS EXPORT =====
@@ -423,139 +296,74 @@ if ($section === 'reports' && $action === 'export' && isset($_GET['format'])) {
                 $bookTitle = isset($b['books']['title']) ? $b['books']['title'] : 'N/A';
                 $userName = isset($b['users']['full_name']) ? $b['users']['full_name'] : 'N/A';
                 $exportData[] = [
-                    'Book' => $bookTitle,
-                    'User' => $userName,
-                    'Borrow Date' => $b['borrow_date'] ?? 'N/A',
-                    'Due Date' => $b['due_date'] ?? 'N/A',
-                    'Return Date' => $b['return_date'] ?? 'N/A',
-                    'Status' => computeBorrowingStatus($b),
+                    'Book' => $bookTitle, 'User' => $userName,
+                    'Borrow Date' => $b['borrow_date'] ?? 'N/A', 'Due Date' => $b['due_date'] ?? 'N/A',
+                    'Return Date' => $b['return_date'] ?? 'N/A', 'Status' => computeBorrowingStatus($b),
                     'Fine Amount' => isset($b['fine_amount']) ? '₱' . number_format(floatval($b['fine_amount']), 2) : '₱0.00'
                 ];
             }
         }
-        if (empty($exportData)) {
-            $exportData[] = ['Book' => 'No records', 'User' => 'No records', 'Borrow Date' => 'N/A', 'Due Date' => 'N/A', 'Return Date' => 'N/A', 'Status' => 'N/A', 'Fine Amount' => '₱0.00'];
-        }
-        
+        if (empty($exportData)) { $exportData[] = ['Book' => 'No records', 'User' => 'No records', 'Borrow Date' => 'N/A', 'Due Date' => 'N/A', 'Return Date' => 'N/A', 'Status' => 'N/A', 'Fine Amount' => '₱0.00']; }
         if ($_GET['format'] === 'excel') {
             header('Content-Type: application/vnd.ms-excel');
             header('Content-Disposition: attachment; filename="borrowings_export_' . ($exportMonth !== '' ? $exportMonth : date('Y-m-d')) . '.xls"');
             echo '<table border="1"><tr style="background:#b40f7d;color:white;">';
-            foreach (array_keys($exportData[0]) as $header) {
-                echo '<th style="padding:8px;">' . preg_replace('/[^\x20-\x7E]/', '', $header) . '</th>';
-            }
+            foreach (array_keys($exportData[0]) as $header) { echo '<th style="padding:8px;">' . preg_replace('/[^\x20-\x7E]/', '', $header) . '</th>'; }
             echo '</tr>';
             foreach ($exportData as $row) {
                 echo '<tr>';
-                foreach ($row as $cell) {
-                    echo '<td style="padding:8px;">' . htmlspecialchars(preg_replace('/[^\x20-\x7E]/', '', $cell)) . '</td>';
-                }
+                foreach ($row as $cell) { echo '<td style="padding:8px;">' . htmlspecialchars(preg_replace('/[^\x20-\x7E]/', '', $cell)) . '</td>'; }
                 echo '</tr>';
             }
             echo '</table>';
             exit;
         }
-    } catch (Exception $e) {
-        echo 'Export error: ' . $e->getMessage();
-        exit;
-    }
+    } catch (Exception $e) { echo 'Export error: ' . $e->getMessage(); exit; }
 }
 
 // ===== BOOK CRUD =====
 if ($section === 'books' && $action === 'add_book' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $title = $_POST['title'] ?? '';
-    $author = $_POST['author'] ?? '';
-    $isbn = $_POST['isbn'] ?? '';
-    $publisher = $_POST['publisher'] ?? '';
-    $year_published = $_POST['year_published'] ?? null;
-    $category_id = $_POST['category_id'] ?? null;
-    $quantity = intval($_POST['quantity'] ?? 1);
-    $available = intval($_POST['available'] ?? 1);
-    $location = $_POST['location'] ?? '';
-    $description = $_POST['description'] ?? '';
-    $keywords = $_POST['keywords'] ?? '';
-    $cover_image = $_POST['cover_image'] ?? '';
-    
+    $title = $_POST['title'] ?? ''; $author = $_POST['author'] ?? '';
+    $isbn = $_POST['isbn'] ?? ''; $publisher = $_POST['publisher'] ?? '';
+    $year_published = $_POST['year_published'] ?? null; $category_id = $_POST['category_id'] ?? null;
+    $quantity = intval($_POST['quantity'] ?? 1); $available = intval($_POST['available'] ?? 1);
+    $location = $_POST['location'] ?? ''; $description = $_POST['description'] ?? '';
+    $keywords = $_POST['keywords'] ?? ''; $cover_image = $_POST['cover_image'] ?? '';
     if ($title && $author) {
         try {
-            $data = [
-                'title' => $title,
-                'author' => $author,
-                'isbn' => $isbn,
-                'publisher' => $publisher,
+            $data = ['title' => $title, 'author' => $author, 'isbn' => $isbn, 'publisher' => $publisher,
                 'year_published' => $year_published ? intval($year_published) : null,
-                'category_id' => $category_id ?: null,
-                'quantity' => $quantity,
-                'available' => $available,
-                'location' => $location,
-                'description' => $description,
-                'keywords' => $keywords
-            ];
-            
-            if (!empty($cover_image)) {
-                $data['cover_image'] = $cover_image;
-            }
-            
+                'category_id' => $category_id ?: null, 'quantity' => $quantity, 'available' => $available,
+                'location' => $location, 'description' => $description, 'keywords' => $keywords];
+            if (!empty($cover_image)) { $data['cover_image'] = $cover_image; }
             supabaseRequest('books', 'POST', $data);
-            header('Location: admin_dashboard.php?section=books&msg=Book added successfully');
-            exit;
-        } catch (Exception $e) {
-            header('Location: admin_dashboard.php?section=books&msg=Error adding book');
-            exit;
-        }
+            header('Location: admin_dashboard.php?section=books&msg=Book added successfully'); exit;
+        } catch (Exception $e) { header('Location: admin_dashboard.php?section=books&msg=Error adding book'); exit; }
     }
-    header('Location: admin_dashboard.php?section=books&msg=Title and author are required');
-    exit;
+    header('Location: admin_dashboard.php?section=books&msg=Title and author are required'); exit;
 }
 
 if ($section === 'books' && $action === 'edit_book' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $bookId = $_POST['book_id'] ?? '';
-    $title = $_POST['title'] ?? '';
-    $author = $_POST['author'] ?? '';
-    $isbn = $_POST['isbn'] ?? '';
-    $publisher = $_POST['publisher'] ?? '';
-    $year_published = $_POST['year_published'] ?? null;
-    $category_id = $_POST['category_id'] ?? null;
-    $quantity = intval($_POST['quantity'] ?? 1);
-    $available = intval($_POST['available'] ?? 1);
-    $location = $_POST['location'] ?? '';
-    $description = $_POST['description'] ?? '';
-    $cover_image = $_POST['cover_image'] ?? '';
-    
+    $bookId = $_POST['book_id'] ?? ''; $title = $_POST['title'] ?? ''; $author = $_POST['author'] ?? '';
+    $isbn = $_POST['isbn'] ?? ''; $publisher = $_POST['publisher'] ?? '';
+    $year_published = $_POST['year_published'] ?? null; $category_id = $_POST['category_id'] ?? null;
+    $quantity = intval($_POST['quantity'] ?? 1); $available = intval($_POST['available'] ?? 1);
+    $location = $_POST['location'] ?? ''; $description = $_POST['description'] ?? ''; $cover_image = $_POST['cover_image'] ?? '';
     if ($bookId && $title && $author) {
         try {
-            $data = [
-                'title' => $title,
-                'author' => $author,
-                'isbn' => $isbn,
-                'publisher' => $publisher,
+            $data = ['title' => $title, 'author' => $author, 'isbn' => $isbn, 'publisher' => $publisher,
                 'year_published' => $year_published ? intval($year_published) : null,
-                'category_id' => $category_id ?: null,
-                'quantity' => $quantity,
-                'available' => $available,
-                'location' => $location,
-                'description' => $description
-            ];
-            
-            if (!empty($cover_image)) {
-                $data['cover_image'] = $cover_image;
-            }
-            
+                'category_id' => $category_id ?: null, 'quantity' => $quantity, 'available' => $available,
+                'location' => $location, 'description' => $description];
+            if (!empty($cover_image)) { $data['cover_image'] = $cover_image; }
             supabaseRequest('books?id=eq.' . $bookId, 'PATCH', $data);
-            header('Location: admin_dashboard.php?section=books&msg=Book updated successfully');
-            exit;
-        } catch (Exception $e) {
-            header('Location: admin_dashboard.php?section=books&msg=Error updating book');
-            exit;
-        }
+            header('Location: admin_dashboard.php?section=books&msg=Book updated successfully'); exit;
+        } catch (Exception $e) { header('Location: admin_dashboard.php?section=books&msg=Error updating book'); exit; }
     }
-    header('Location: admin_dashboard.php?section=books&msg=Title and author are required');
-    exit;
+    header('Location: admin_dashboard.php?section=books&msg=Title and author are required'); exit;
 }
 
 // ===== USER CRUD =====
-// User activate/deactivate/delete actions are submitted with POST and confirmed
-// using an in-page modal. The redirect carries a message which is shown as a toast.
 if ($section === 'users' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['user_action'])) {
     $userAction = (string)$_POST['user_action'];
     $userId = trim((string)($_POST['user_id'] ?? ''));
@@ -563,110 +371,75 @@ if ($section === 'users' && $_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POS
         try {
             if ($userAction === 'toggle') {
                 $targetUsers = supabaseRequest('users?select=id,is_active&id=eq.' . rawurlencode($userId));
-                if (empty($targetUsers)) {
-                    header('Location: admin_dashboard.php?section=users&msg=' . urlencode('User not found') . '&msg_type=error');
-                    exit;
-                }
+                if (empty($targetUsers)) { header('Location: admin_dashboard.php?section=users&msg=' . urlencode('User not found') . '&msg_type=error'); exit; }
                 $newStatus = !((bool)($targetUsers[0]['is_active'] ?? false));
                 supabaseRequest('users?id=eq.' . rawurlencode($userId), 'PATCH', ['is_active' => $newStatus]);
                 $message = $newStatus ? 'User account activated successfully.' : 'User account deactivated successfully.';
             } else {
-                // Prevent deleting an administrator account through this screen.
                 $targetUsers = supabaseRequest('users?select=id,role&id=eq.' . rawurlencode($userId));
-                if (empty($targetUsers)) {
-                    header('Location: admin_dashboard.php?section=users&msg=' . urlencode('User not found') . '&msg_type=error');
-                    exit;
-                }
+                if (empty($targetUsers)) { header('Location: admin_dashboard.php?section=users&msg=' . urlencode('User not found') . '&msg_type=error'); exit; }
                 if (strtolower(trim((string)($targetUsers[0]['role'] ?? ''))) === 'admin') {
-                    header('Location: admin_dashboard.php?section=users&msg=' . urlencode('Administrator accounts cannot be deleted here.') . '&msg_type=error');
-                    exit;
+                    header('Location: admin_dashboard.php?section=users&msg=' . urlencode('Administrator accounts cannot be deleted here.') . '&msg_type=error'); exit;
                 }
                 supabaseRequest('users?id=eq.' . rawurlencode($userId), 'DELETE');
                 $message = 'User account deleted successfully.';
             }
-            header('Location: admin_dashboard.php?section=users&msg=' . urlencode($message) . '&msg_type=success');
-            exit;
+            header('Location: admin_dashboard.php?section=users&msg=' . urlencode($message) . '&msg_type=success'); exit;
         } catch (Exception $e) {
             error_log('User management action failed: ' . $e->getMessage());
-            header('Location: admin_dashboard.php?section=users&msg=' . urlencode('The action could not be completed. Please check the database permissions and try again.') . '&msg_type=error');
-            exit;
+            header('Location: admin_dashboard.php?section=users&msg=' . urlencode('The action could not be completed. Please check the database permissions and try again.') . '&msg_type=error'); exit;
         }
     }
-    header('Location: admin_dashboard.php?section=users&msg=' . urlencode('Invalid user action.') . '&msg_type=error');
-    exit;
+    header('Location: admin_dashboard.php?section=users&msg=' . urlencode('Invalid user action.') . '&msg_type=error'); exit;
 }
 
 if ($section === 'users' && isset($_GET['action']) && $_GET['action'] === 'add' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-        $username = $_POST['username'] ?? '';
-        $email = $_POST['email'] ?? '';
-        $password = $_POST['password'] ?? '';
-        $full_name = $_POST['full_name'] ?? '';
-        $role = strtolower(trim((string)($_POST['role'] ?? 'librarian')));
-        if (!in_array($role, ['student', 'teacher', 'librarian', 'admin'], true)) {
-            $role = 'librarian';
-        }
-        
-        if ($username && $email && $password && $full_name) {
-            try {
-                $newUser = [
-                    'username' => $username,
-                    'email' => $email,
-                    'password' => $password,
-                    'full_name' => $full_name,
-                    'role' => $role,
-                    'user_id' => strtoupper(substr($role, 0, 3)) . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT),
-                    'is_verified' => true,
-                    'is_active' => true
-                ];
-                supabaseRequest('users', 'POST', $newUser);
-                header('Location: admin_dashboard.php?section=users&msg=User added');
-                exit;
-            } catch (Exception $e) {}
-        }
-        header('Location: admin_dashboard.php?section=users&msg=Error adding user');
-        exit;
+    $username = $_POST['username'] ?? ''; $email = $_POST['email'] ?? ''; $password = $_POST['password'] ?? '';
+    $full_name = $_POST['full_name'] ?? ''; $role = strtolower(trim((string)($_POST['role'] ?? 'librarian')));
+    if (!in_array($role, ['student', 'teacher', 'librarian', 'admin'], true)) { $role = 'librarian'; }
+    if ($username && $email && $password && $full_name) {
+        try {
+            $newUser = ['username' => $username, 'email' => $email, 'password' => $password, 'full_name' => $full_name,
+                'role' => $role,
+                'user_id' => strtoupper(substr($role, 0, 3)) . str_pad(rand(1, 999), 3, '0', STR_PAD_LEFT),
+                'is_verified' => true, 'is_active' => true];
+            supabaseRequest('users', 'POST', $newUser);
+            header('Location: admin_dashboard.php?section=users&msg=User added'); exit;
+        } catch (Exception $e) {}
+    }
+    header('Location: admin_dashboard.php?section=users&msg=Error adding user'); exit;
 }
 
 // ===== SETTINGS HANDLING =====
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action']) && $_POST['action'] === 'update_fines') {
     try {
-        $data = [
-            'fine_per_day' => floatval($_POST['fine_per_day'] ?? 50),
+        $data = ['fine_per_day' => floatval($_POST['fine_per_day'] ?? 50),
             'lost_book_fee' => floatval($_POST['lost_book_fee'] ?? 500),
             'damaged_book_fee' => floatval($_POST['damaged_book_fee'] ?? 200),
-            'grace_period' => intval($_POST['grace_period'] ?? 0)
-        ];
-        
+            'grace_period' => intval($_POST['grace_period'] ?? 0)];
         $existingSettings = supabaseRequest('fine_settings?select=*');
         if (!empty($existingSettings)) {
             supabaseRequest('fine_settings?id=eq.' . $existingSettings[0]['id'], 'PATCH', $data);
         } else {
             supabaseRequest('fine_settings', 'POST', $data);
         }
-        header('Location: admin_dashboard.php?section=settings&msg=Settings updated');
-        exit;
-    } catch (Exception $e) {
-        header('Location: admin_dashboard.php?section=settings&msg=Error updating settings');
-        exit;
-    }
+        header('Location: admin_dashboard.php?section=settings&msg=Settings updated'); exit;
+    } catch (Exception $e) { header('Location: admin_dashboard.php?section=settings&msg=Error updating settings'); exit; }
 }
 
 // ===== DELETE BOOK =====
 if ($section === 'books' && isset($_GET['delete_book'])) {
     try {
         supabaseRequest('books?id=eq.' . $_GET['delete_book'], 'DELETE');
-        echo '<script>window.location.href="admin_dashboard.php?section=books&msg=Book deleted";</script>';
-        exit;
+        echo '<script>window.location.href="admin_dashboard.php?section=books&msg=Book deleted";</script>'; exit;
     } catch (Exception $e) {
-        echo '<script>window.location.href="admin_dashboard.php?section=books&msg=Error deleting book";</script>';
-        exit;
+        echo '<script>window.location.href="admin_dashboard.php?section=books&msg=Error deleting book";</script>'; exit;
     }
 }
 
 // ===== RETURN BORROWING (admin) =====
 if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
-    $borrowingId = $_GET['id'];
-    $issue = $_GET['issue'] ?? 'none';
+    $borrowingId = $_GET['id']; $issue = $_GET['issue'] ?? 'none';
     try {
         $rows = supabaseRequest('borrowings?select=id,book_id,status,due_date,user_id&id=eq.' . rawurlencode($borrowingId));
         if (empty($rows)) throw new Exception('Borrowing not found');
@@ -674,12 +447,10 @@ if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
         $result = libraryProcessBookReturn($rows[0], $issue, 'admin_dashboard.php');
         $msg = 'Book return recorded';
         if ($result['amount'] > 0) $msg .= '. Fine: ₱' . number_format($result['amount'], 2) . ' (' . $result['reason'] . ')';
-        header('Location: admin_dashboard.php?section=borrowings&msg=' . urlencode($msg));
-        exit;
+        header('Location: admin_dashboard.php?section=borrowings&msg=' . urlencode($msg)); exit;
     } catch (Throwable $e) {
         error_log('Return processing failed: ' . $e->getMessage());
-        header('Location: admin_dashboard.php?section=borrowings&msg=' . urlencode('Unable to process return: ' . $e->getMessage()));
-        exit;
+        header('Location: admin_dashboard.php?section=borrowings&msg=' . urlencode('Unable to process return: ' . $e->getMessage())); exit;
     }
 }
 
@@ -687,85 +458,36 @@ if ($section === 'borrowings' && $action === 'return' && isset($_GET['id'])) {
 if ($section === 'fines' && $action === 'pay' && isset($_GET['id'])) {
     $fineId = $_GET['id'];
     try {
-        supabaseRequest('fines?id=eq.' . $fineId, 'PATCH', [
-            'status' => 'Paid',
-            'paid_date' => date('Y-m-d H:i:s')
-        ]);
-        header('Location: admin_dashboard.php?section=fines&msg=Fine paid successfully');
-        exit;
-    } catch (Exception $e) {
-        header('Location: admin_dashboard.php?section=fines&msg=Error paying fine');
-        exit;
-    }
+        supabaseRequest('fines?id=eq.' . $fineId, 'PATCH', ['status' => 'Paid', 'paid_date' => date('Y-m-d H:i:s')]);
+        header('Location: admin_dashboard.php?section=fines&msg=Fine paid successfully'); exit;
+    } catch (Exception $e) { header('Location: admin_dashboard.php?section=fines&msg=Error paying fine'); exit; }
 }
 
 // ===== ADD FINE (admin) =====
 if ($section === 'fines' && $action === 'add_fine' && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $student_id = $_POST['student_id'] ?? '';
-    $amount = floatval($_POST['amount'] ?? 0);
-    $reason = $_POST['reason'] ?? 'Late Return';
-    $notes = $_POST['notes'] ?? '';
-    
-    if (empty($student_id) || $amount <= 0) {
-        header('Location: admin_dashboard.php?section=fines&msg=Student and amount are required');
-        exit;
-    }
-    
+    $student_id = $_POST['student_id'] ?? ''; $amount = floatval($_POST['amount'] ?? 0);
+    $reason = $_POST['reason'] ?? 'Late Return'; $notes = $_POST['notes'] ?? '';
+    if (empty($student_id) || $amount <= 0) { header('Location: admin_dashboard.php?section=fines&msg=Student and amount are required'); exit; }
     try {
         $studentRecord = supabaseRequest('students?select=user_id,student_id&id=eq.' . $student_id);
-        if (empty($studentRecord)) {
-            header('Location: admin_dashboard.php?section=fines&msg=Student not found');
-            exit;
-        }
+        if (empty($studentRecord)) { header('Location: admin_dashboard.php?section=fines&msg=Student not found'); exit; }
         $user_id = $studentRecord[0]['user_id'];
-        
-        $fineData = [
-            'user_id' => $user_id,
-            'amount' => $amount,
-            'reason' => $reason,
-            'status' => 'Pending'
-        ];
-        
-        if (!empty($notes)) {
-            $fineData['notes'] = $notes;
+        $fineData = ['user_id' => $user_id, 'amount' => $amount, 'reason' => $reason, 'status' => 'Pending'];
+        if (!empty($notes)) { $fineData['notes'] = $notes; }
+        try { supabaseRequest('fines', 'POST', $fineData); }
+        catch (Exception $e) {
+            if (strpos($e->getMessage(), 'notes') !== false) { unset($fineData['notes']); supabaseRequest('fines', 'POST', $fineData); }
+            else { throw $e; }
         }
-        
-        try {
-            supabaseRequest('fines', 'POST', $fineData);
-        } catch (Exception $e) {
-            if (strpos($e->getMessage(), 'notes') !== false) {
-                unset($fineData['notes']);
-                supabaseRequest('fines', 'POST', $fineData);
-            } else {
-                throw $e;
-            }
-        }
-        
-        header('Location: admin_dashboard.php?section=fines&msg=Fine added successfully');
-        exit;
-    } catch (Exception $e) {
-        header('Location: admin_dashboard.php?section=fines&msg=Error adding fine: ' . $e->getMessage());
-        exit;
-    }
+        header('Location: admin_dashboard.php?section=fines&msg=Fine added successfully'); exit;
+    } catch (Exception $e) { header('Location: admin_dashboard.php?section=fines&msg=Error adding fine: ' . $e->getMessage()); exit; }
 }
 
 // ===== FETCH DATA =====
-$books = [];
-$categories = [];
-$users = [];
-$borrowings = [];
-$fines = [];
-$fineSettings = [];
-$academicYears = [];
-$students = [];
-$reservations = [];
-$notifications = [];
-$classSetRequests = [];
-$pendingClassSetRequests = [];
-$purchaseRequests = [];
-$pendingPurchaseRequests = [];
-$teacherNameMap = [];
-$bookError = '';
+$books = []; $categories = []; $users = []; $borrowings = []; $fines = [];
+$fineSettings = []; $academicYears = []; $students = []; $reservations = []; $notifications = [];
+$classSetRequests = []; $pendingClassSetRequests = []; $purchaseRequests = []; $pendingPurchaseRequests = [];
+$teacherNameMap = []; $bookError = '';
 $userMessage = isset($_GET['msg']) ? $_GET['msg'] : '';
 $bookSearchTerm = isset($_GET['search']) ? $_GET['search'] : '';
 $userSearchTerm = isset($_GET['user_search']) ? $_GET['user_search'] : '';
@@ -778,7 +500,6 @@ try {
     $categories = supabaseRequest('categories?select=*');
     $users = supabaseRequest('users?select=*');
     $students = supabaseRequest('students?select=*,users(full_name,user_id,email)');
-    
     $borrowingsRaw = supabaseRequest('borrowings?select=*,books(title,author),users(full_name,user_id,username)&order=borrow_date.desc');
     $borrowings = [];
     if (is_array($borrowingsRaw) && !empty($borrowingsRaw)) {
@@ -787,57 +508,30 @@ try {
             $userFullName = isset($b['users']['full_name']) ? $b['users']['full_name'] : 'N/A';
             $userDisplayId = isset($b['users']['user_id']) ? $b['users']['user_id'] : 'N/A';
             $displayStatus = computeBorrowingStatus($b);
-            $borrowings[] = array_merge($b, [
-                'book_title' => $bookTitle,
-                'user_full_name' => $userFullName,
-                'user_display_id' => $userDisplayId,
-                'display_status' => $displayStatus
-            ]);
+            $borrowings[] = array_merge($b, ['book_title' => $bookTitle, 'user_full_name' => $userFullName, 'user_display_id' => $userDisplayId, 'display_status' => $displayStatus]);
         }
     }
-    
     $fines = supabaseRequest('fines?select=*');
     $fineSettings = supabaseRequest('fine_settings?select=*');
     $academicYears = supabaseRequest('academic_years?select=*');
-    
-    try {
-        $reservations = supabaseRequest('reservations?select=*,books(title,author)&order=reservation_date.desc');
-    } catch (Exception $e) {
-        $reservations = [];
-    }
-    
-    try {
-        $notifications = supabaseRequest('notifications?select=*&order=created_at.desc&limit=50');
-    } catch (Exception $e) {
-        $notifications = [];
-    }
-
-    // Teacher class-set / bulk book requests (same records shown in the librarian workspace).
+    try { $reservations = supabaseRequest('reservations?select=*,books(title,author)&order=reservation_date.desc'); } catch (Exception $e) { $reservations = []; }
+    try { $notifications = supabaseRequest('notifications?select=*&order=created_at.desc&limit=50'); } catch (Exception $e) { $notifications = []; }
     try {
         $classSetRequests = supabaseRequest('class_set_requests?select=*&order=created_at.desc');
         if (!is_array($classSetRequests)) $classSetRequests = [];
-    } catch (Exception $e) {
-        $classSetRequests = [];
-        error_log('Admin class-set request load failed: ' . $e->getMessage());
-    }
-    // Resolve teacher identifiers stored by older and newer request forms.
-    // Depending on the form version, teacher_id may contain users.id, users.user_id,
-    // users.auth_user_id, or the login username. Index all available identifiers.
+    } catch (Exception $e) { $classSetRequests = []; error_log('Admin class-set request load failed: ' . $e->getMessage()); }
     foreach ($users as $knownUser) {
         $knownName = trim((string)($knownUser['full_name'] ?? ''));
         if ($knownName === '') $knownName = trim((string)($knownUser['username'] ?? ''));
         if ($knownName === '') $knownName = trim((string)($knownUser['email'] ?? ''));
         foreach (['id', 'user_id', 'auth_user_id', 'username', 'email'] as $identifierField) {
-            if (!empty($knownUser[$identifierField])) {
-                $teacherNameMap[strtolower(trim((string)$knownUser[$identifierField]))] = $knownName;
-            }
+            if (!empty($knownUser[$identifierField])) { $teacherNameMap[strtolower(trim((string)$knownUser[$identifierField]))] = $knownName; }
         }
     }
     $resolveTeacherName = function($teacherId) use (&$teacherNameMap) {
         $key = strtolower(trim((string)$teacherId));
         if ($key === '') return 'Unknown teacher';
         if (!empty($teacherNameMap[$key])) return $teacherNameMap[$key];
-        // Fallback for request rows created with a UUID not present in the first lookup.
         try {
             $matches = supabaseRequest('users?select=*&id=eq.' . rawurlencode($key) . '&limit=1');
             if (empty($matches)) $matches = supabaseRequest('users?select=*&user_id=eq.' . rawurlencode($key) . '&limit=1');
@@ -852,20 +546,15 @@ try {
         } catch (Throwable $lookupError) { error_log('Teacher name lookup failed: ' . $lookupError->getMessage()); }
         return 'Teacher account';
     };
-    foreach ($classSetRequests as &$classRequest) {
-        $classRequest['teacher_name'] = $resolveTeacherName($classRequest['teacher_id'] ?? '');
-    }
+    foreach ($classSetRequests as &$classRequest) { $classRequest['teacher_name'] = $resolveTeacherName($classRequest['teacher_id'] ?? ''); }
     unset($classRequest);
     $pendingClassSetRequests = array_values(array_filter($classSetRequests, function($r) {
         return in_array(($r['status'] ?? 'Pending'), ['Pending', 'Under Review'], true);
     }));
-    // Teacher book-purchase recommendations are shown directly in the admin dashboard.
     try {
         $purchaseRequests = supabaseRequest('book_purchase_requests?select=*&order=created_at.desc');
         if (!is_array($purchaseRequests)) $purchaseRequests = [];
-        foreach ($purchaseRequests as &$purchaseRequest) {
-            $purchaseRequest['teacher_name'] = $resolveTeacherName($purchaseRequest['teacher_id'] ?? '');
-        }
+        foreach ($purchaseRequests as &$purchaseRequest) { $purchaseRequest['teacher_name'] = $resolveTeacherName($purchaseRequest['teacher_id'] ?? ''); }
         unset($purchaseRequest);
         $pendingPurchaseRequests = array_values(array_filter($purchaseRequests, function($r) {
             return in_array(($r['status'] ?? 'Pending'), ['Pending', 'Under Review'], true);
@@ -874,14 +563,10 @@ try {
         $purchaseRequests = []; $pendingPurchaseRequests = [];
         error_log('Admin purchase request load failed: '.$purchaseError->getMessage());
     }
-} catch (Exception $e) {
-    $bookError = $e->getMessage();
-}
+} catch (Exception $e) { $bookError = $e->getMessage(); }
 
 $catMap = [];
-foreach ($categories as $cat) {
-    $catMap[$cat['id']] = $cat['name'];
-}
+foreach ($categories as $cat) { $catMap[$cat['id']] = $cat['name']; }
 
 $filteredUsers = array_filter($users, function($u) use ($userSearchTerm, $userFilterRole) {
     if ($userFilterRole !== 'all' && strtolower(trim((string)($u['role'] ?? ''))) !== strtolower(trim((string)$userFilterRole))) return false;
@@ -922,15 +607,11 @@ $stats = [
     'totalTeachers' => count(array_filter($users, function($u) { return strtolower(trim((string)($u['role'] ?? ''))) === 'teacher'; })),
     'totalBooks' => count($books),
     'totalBorrowings' => count($borrowings),
-    'activeBorrowings' => count(array_filter($borrowings, function($b) {
-        return ($b['status'] ?? '') !== 'Returned';
-    })),
+    'activeBorrowings' => count(array_filter($borrowings, function($b) { return ($b['status'] ?? '') !== 'Returned'; })),
     'totalOverdue' => count(array_filter($borrowings, function($b) { return ($b['display_status'] ?? '') === 'Overdue'; })),
     'totalFines' => array_sum(array_column($fines, 'amount')),
     'totalFinesCount' => count($fines),
-    'pendingFines' => count(array_filter($fines, function($f) {
-        return ($f['status'] ?? '') !== 'Paid';
-    })),
+    'pendingFines' => count(array_filter($fines, function($f) { return ($f['status'] ?? '') !== 'Paid'; })),
     'paidFines' => count(array_filter($fines, function($f) { return ($f['status'] ?? '') === 'Paid'; })),
     'totalReservations' => count($reservations)
 ];
@@ -939,13 +620,11 @@ $borrowingRate = $stats['totalBooks'] > 0 ? round(($stats['totalBorrowings'] / $
 $availableRate = $stats['totalBooks'] > 0 ? round((($stats['totalBooks'] - $stats['totalBorrowings']) / $stats['totalBooks']) * 100) : 0;
 $overdueRate = $stats['totalBooks'] > 0 ? round(($stats['totalOverdue'] / $stats['totalBooks']) * 100) : 0;
 $activeUsersRate = $stats['totalUsers'] > 0 ? round(($stats['totalUsers'] / ($stats['totalUsers'] + 10)) * 100) : 0;
-
 $total = $stats['totalUsers'] > 0 ? $stats['totalUsers'] : 1;
 $present = min(85, round(($stats['totalBorrowings'] / ($total * 2)) * 100));
 $late = min(15, round(($stats['totalOverdue'] / ($total * 2)) * 100));
 $absent = max(0, 100 - $present - $late - 5);
 $excused = 5;
-
 $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' => 50, 'lost_book_fee' => 500, 'damaged_book_fee' => 200, 'grace_period' => 0];
 ?>
 <!DOCTYPE html>
@@ -963,80 +642,39 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         ::-webkit-scrollbar-track { background: #f5e8f0; }
         ::-webkit-scrollbar-thumb { background: #d4a8c0; border-radius: 3px; }
 
-        .top-header {
-            position: fixed;
-            top: 0;
-            left: 240px;
-            right: 0;
-            height: 56px;
-            background: #010107;
-            border-bottom: 1px solid #2a2a3e;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 0 20px;
-            z-index: 1100;
-            transition: left 0.25s ease;
-        }
+        .top-header { position: fixed; top: 0; left: 240px; right: 0; height: 56px; background: #010107; border-bottom: 1px solid #2a2a3e; display: flex; align-items: center; justify-content: space-between; padding: 0 20px; z-index: 1100; transition: left 0.25s ease; }
         .top-header.collapsed { left: 70px; }
         .header-left-group { display: flex; align-items: center; gap: 14px; min-width: 0; }
-        .hamburger-btn {
-            background: rgba(255,255,255,0.05);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 8px;
-            width: 38px; height: 38px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            flex-shrink: 0;
-        }
+        .hamburger-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s ease; flex-shrink: 0; }
         .hamburger-btn:hover { background: rgba(180, 15, 125, 0.18); border-color: rgba(180, 15, 125, 0.3); }
         .hamburger-lines { display: flex; flex-direction: column; gap: 4px; width: 18px; }
         .hamburger-lines span { display: block; height: 2px; width: 100%; background: #e8dce8; border-radius: 2px; transition: 0.3s; }
-        .header-nav-symbols { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-        .header-nav-symbols a {
-            display: flex; align-items: center; justify-content: center;
-            width: 38px; height: 38px;
-            border-radius: 8px;
-            color: rgba(255,255,255,0.5);
-            text-decoration: none;
-            font-size: 17px;
-            transition: all 0.2s ease;
-            position: relative;
-        }
-        .header-nav-symbols a:hover { color: #f0e8e8; background: rgba(255,255,255,0.05); }
-        .header-nav-symbols a.active { color: #f0e8e8; background: rgba(180, 15, 125, 0.18); }
-        .header-nav-symbols a .header-badge {
-            position: absolute; top: 3px; right: 3px;
-            background: #b40f7d; color: #fff;
-            font-size: 9px; font-weight: 700;
-            min-width: 15px; height: 15px;
-            border-radius: 8px;
-            display: flex; align-items: center; justify-content: center;
-            padding: 0 4px;
-        }
+        .header-nav-symbols { display:flex; align-items:center; justify-content:flex-end; gap:8px; min-width:0; flex:1; }
+        .header-nav-symbols .header-action { display:inline-flex; align-items:center; justify-content:center; gap:7px; min-height:36px; padding:0 11px; border:1px solid rgba(255,255,255,.12); border-radius:10px; background:rgba(255,255,255,.055); color:#f8eaf4; text-decoration:none; white-space:nowrap; font-size:12px; cursor:pointer; transition:background .22s ease,border-color .22s ease,transform .22s ease; position:relative; }
+        .header-nav-symbols .header-action:hover { background:rgba(194,10,130,.22); border-color:rgba(255,1,153,.45); transform:translateY(-1px); }
+        .header-nav-symbols .header-action .action-icon { font-size:15px; line-height:1; }
+        .header-badge { position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;display:flex;align-items:center;justify-content:center;border-radius:20px;background:#ff0199;color:#fff;font-size:9px;font-weight:800;border:2px solid #08080a; }
+        .header-clock { color:#bca8bb; font-size:11px; font-variant-numeric:tabular-nums; white-space:nowrap; padding:0 3px; }
+        .header-nav-symbols .logout-action { background:#b40f7d; border-color:#b40f7d; color:#fff; font-weight:700; }
+        .header-nav-symbols .logout-action:hover { background:#d41688; }
+        .header-nav-symbols .theme-action { min-width:102px; }
+        .profile-modal-backdrop { display:none; position:fixed; inset:0; z-index:3000; background:rgba(7,3,8,.62); backdrop-filter:blur(5px); align-items:center; justify-content:center; padding:18px; }
+        .profile-modal-backdrop.open { display:flex; }
+        .admin-profile-modal { width:min(520px,100%); background:var(--admin-panel,#fff); color:var(--admin-ink,#211620); border:1px solid var(--admin-border,#f0d5e7); border-radius:20px; padding:26px; box-shadow:0 24px 80px rgba(0,0,0,.25); animation:profilePop .22s ease-out; }
+        @keyframes profilePop { from { opacity:0; transform:translateY(10px) scale(.98) } to { opacity:1; transform:translateY(0) scale(1) } }
+        .admin-profile-modal-head { display:flex; align-items:center; gap:14px; margin-bottom:22px; }
+        .admin-profile-avatar { width:58px;height:58px;display:grid;place-items:center;border-radius:50%;background:linear-gradient(135deg,#171018,#d41688);color:#fff;font-size:22px;font-weight:800; }
+        .admin-profile-modal h2 { margin:0 0 4px;font-size:20px; }.admin-profile-modal p { margin:0;color:var(--admin-muted,#8d7d89);font-size:12px; }
+        .admin-profile-grid { display:grid;grid-template-columns:1fr 1fr;gap:12px; }.admin-profile-item { padding:13px;border:1px solid var(--admin-border,#f0d5e7);border-radius:12px;background:var(--admin-soft,#fff8fc);min-width:0; }.admin-profile-item span { display:block;font-size:10px;text-transform:uppercase;letter-spacing:.7px;color:var(--admin-muted,#8d7d89);margin-bottom:6px; }.admin-profile-item strong { font-size:13px;overflow-wrap:anywhere; }
+        .admin-profile-modal-actions { display:flex;justify-content:flex-end;gap:8px;margin-top:20px; }.admin-profile-modal-actions button { border:0;border-radius:9px;padding:10px 14px;cursor:pointer;font-weight:700; }.profile-close-btn { background:var(--admin-soft,#fff8fc);color:var(--admin-ink,#211620);border:1px solid var(--admin-border,#f0d5e7)!important; }.profile-settings-btn { background:#b40f7d;color:#fff; }
+        body[data-theme="dark"] { --admin-bg:#111016;--admin-panel:#1b1820;--admin-ink:#f7edf5;--admin-muted:#b8a8b8;--admin-border:#3c2c3b;--admin-soft:#241c27;background:var(--admin-bg)!important;color:var(--admin-ink)!important; }
+        body[data-theme="dark"] .admin-content, body[data-theme="dark"] .dashboard-content { background:var(--admin-bg)!important;color:var(--admin-ink)!important; }
+        @media (max-width:1100px) { .header-nav-symbols { gap:5px; }.header-nav-symbols .header-action { padding:0 9px; }.header-nav-symbols .action-label { display:none; }.header-nav-symbols .header-action { width:38px;padding:0; }.header-nav-symbols .theme-action { width:auto;padding:0 10px; } }
+        @media (max-width:600px) { .top-header { left:0!important;right:0!important;width:100%;padding:0 9px;gap:8px; }.top-header.collapsed { left:0!important; }.header-left-group { gap:6px; }.header-nav-symbols { gap:4px; overflow-x:auto; scrollbar-width:none; }.header-nav-symbols::-webkit-scrollbar { display:none; }.header-nav-symbols .header-action { width:32px;height:34px;min-height:34px;border-radius:8px; }.header-nav-symbols .theme-action { width:36px;padding:0;min-width:0; }.header-clock { display:none; }.admin-profile-grid { grid-template-columns:1fr; } }
 
-        .admin-sidebar {
-            width: 240px;
-            background: #010107;
-            color: #e8dce8;
-            display: flex;
-            flex-direction: column;
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 100vh;
-            overflow-y: auto;
-            overflow-x: hidden;
-            z-index: 1050;
-            border-right: 1px solid #2a2a3e;
-            transition: width 0.25s ease, transform 0.3s ease;
-        }
+        .admin-sidebar { width: 240px; background: #010107; color: #e8dce8; display: flex; flex-direction: column; position: fixed; top: 0; left: 0; height: 100vh; overflow-y: auto; overflow-x: hidden; z-index: 1050; border-right: 1px solid #2a2a3e; transition: width 0.25s ease, transform 0.3s ease; }
         .admin-sidebar.collapsed { width: 70px; }
-        .admin-sidebar.collapsed .sidebar-header .school-name,
-        .admin-sidebar.collapsed .sidebar-header .school-sub,
-        .admin-sidebar.collapsed .sidebar-header .user-info,
-        .admin-sidebar.collapsed .sidebar-nav a .nav-label { display: none; }
+        .admin-sidebar.collapsed .sidebar-header .school-name, .admin-sidebar.collapsed .sidebar-header .school-sub, .admin-sidebar.collapsed .sidebar-header .user-info, .admin-sidebar.collapsed .sidebar-nav a .nav-label { display: none; }
         .admin-sidebar.collapsed .sidebar-nav a { justify-content: center; padding: 14px; font-size: 20px; }
         .admin-sidebar.collapsed .sidebar-nav a .nav-icon { font-size: 22px; }
         .admin-sidebar.collapsed .sidebar-header { padding: 16px 8px; text-align: center; }
@@ -1045,26 +683,11 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .admin-sidebar.collapsed .logout-btn .logout-text { display: none; }
         .admin-sidebar.collapsed .request-count-badge { position: absolute; top: 6px; right: 6px; margin: 0; }
         .admin-sidebar.collapsed .sidebar-logo-wrapper { justify-content: center; }
-        .admin-sidebar.collapsed .sidebar-header .sidebar-logo {
-            max-width: 40px; width: 40px; margin: 0 auto;
-        }
+        .admin-sidebar.collapsed .sidebar-header .sidebar-logo { max-width: 40px; width: 40px; margin: 0 auto; }
 
         .sidebar-header { padding: 28px 24px 20px; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left; transition: padding 0.25s ease; }
-        .sidebar-logo-wrapper {
-            width: 100%;
-            display: flex;
-            align-items: center;
-            justify-content: flex-start;
-            transition: justify-content 0.25s ease;
-        }
-        .sidebar-header .sidebar-logo {
-            max-width: 72px;
-            width: 72px;
-            height: auto;
-            display: block;
-            margin-bottom: 12px;
-            transition: max-width 0.3s ease, width 0.3s ease, margin 0.3s ease;
-        }
+        .sidebar-logo-wrapper { width: 100%; display: flex; align-items: center; justify-content: flex-start; transition: justify-content 0.25s ease; }
+        .sidebar-header .sidebar-logo { max-width: 72px; width: 72px; height: auto; display: block; margin-bottom: 12px; transition: max-width 0.3s ease, width 0.3s ease, margin 0.3s ease; }
         .sidebar-header .school-name { color: #f0e8e8; font-size: 14px; font-weight: 700; letter-spacing: 0.5px; line-height: 1.2; }
         .sidebar-header .school-sub { color: rgba(255,255,255,0.4); font-size: 11px; letter-spacing: 1px; margin-top: 2px; font-weight: 300; }
         .sidebar-header .user-info { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.06); }
@@ -1081,9 +704,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .sidebar-nav a .request-count-badge { background: #b40f7d; color: white; font-size: 10px; padding: 2px 8px; border-radius: 10px; margin-left: auto; }
         .workspace-nav-group { margin: 3px 0; }
         .workspace-nav-group.open { background:rgba(255,255,255,.018); }
-        .workspace-nav-menu a span:first-child { min-width:0; }
-        .workspace-nav-menu a .request-count-badge { margin-left:auto; }
-        .workspace-nav-toggle:focus-visible, .workspace-nav-menu a:focus-visible { outline:2px solid #e6a2d0; outline-offset:2px; }
         .workspace-nav-toggle { width:100%; display:flex; align-items:center; gap:12px; padding:11px 24px; color:rgba(255,255,255,.58); background:transparent; border:0; border-left:3px solid transparent; text-align:left; font:inherit; font-size:14px; cursor:pointer; }
         .workspace-nav-toggle:hover, .workspace-nav-group.open .workspace-nav-toggle { color:#f0e8e8; background:rgba(255,255,255,.045); border-left-color:rgba(255,255,255,.15); }
         .workspace-nav-toggle .nav-icon { font-size:17px; width:22px; text-align:center; opacity:.7; }
@@ -1107,7 +727,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
 
         .admin-content { margin-left: 240px; flex: 1; padding: 80px 40px 32px; background: #f8f0f5; min-height: 100vh; transition: margin-left 0.25s ease; }
         .admin-content.collapsed { margin-left: 70px; }
-
         .mobile-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1040; }
         .mobile-overlay.active { display: block; }
 
@@ -1118,8 +737,8 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .dashboard-header h1 { font-size: 22px; color: #f0e8e8; margin: 0; font-weight: 600; letter-spacing: -0.3px; }
         .dashboard-header .header-sub { color: rgba(255,255,255,0.5); font-size: 13px; margin: 4px 0 0; }
         .header-time { text-align: right; background: rgba(255,255,255,0.06); padding: 8px 20px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06); position: relative; z-index: 1; }
-        .header-time .time { font-size: 20px; font-weight: 600; color: #000000; display: block; letter-spacing: 0.3px; }
-        .header-time .date { font-size: 12px; color: rgba(0, 0, 0, 0.99); letter-spacing: 0.3px; }
+        .header-time .time { font-size: 20px; font-weight: 600; display: block; letter-spacing: 0.3px; }
+        .header-time .date { font-size: 12px; letter-spacing: 0.3px; }
 
         .stats-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 12px; margin-bottom: 24px; }
         .stat-card { background: #ffffff; padding: 16px 14px; border-radius: 12px; border: 1px solid #f0e0ee; text-align: center; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
@@ -1210,10 +829,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .status-badge.approved { background: #e8f0ee; color: #2a4a4a; }
         .status-badge.rejected { background: #f0e0e8; color: #8a2a5a; }
         .status-badge.fulfilled { background: #e8f0ee; color: #2a4a4a; }
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
-        }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 
         .no-data { text-align: center; padding: 30px !important; color: #b8a8b8; }
 
@@ -1255,7 +871,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .cover-preview { max-width: 150px; max-height: 200px; object-fit: cover; border-radius: 8px; }
         .btn-remove-cover { position: absolute; top: -8px; right: -8px; width: 26px; height: 26px; border-radius: 50%; background: #f0e0e8; color: #8a2a5a; border: 2px solid #ffffff; cursor: pointer; font-size: 12px; display: flex; align-items: center; justify-content: center; }
 
-        /* ===== BOOK GRID ===== */
         .book-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 24px; }
         .book-card { background: #ffffff; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.04); border: 1px solid #f0e0ee; transition: all 0.3s ease; display: flex; flex-direction: column; min-width: 0; }
         .book-card:hover { transform: translateY(-4px); box-shadow: 0 8px 30px rgba(0,0,0,0.08); border-color: #d460b8; }
@@ -1276,7 +891,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .book-card .book-actions { display: flex; gap: 8px; flex-wrap: wrap; }
         .book-card .relevance-score { padding: 2px 12px; border-radius: 12px; font-size: 11px; background: #f0edea; color: #4a3a2e; align-self: flex-end; margin-top: 4px; }
 
-        /* ===== PREDICTIVE SEARCH DROPDOWN ===== */
         .predictive-results { position: absolute; top: 100%; left: 0; right: 0; background: #ffffff; border: 2px solid #f0e0ee; border-top: none; border-radius: 0 0 12px 12px; max-height: 400px; overflow-y: auto; z-index: 1000; display: none; box-shadow: 0 8px 30px rgba(0,0,0,0.08); }
         .predictive-results.visible { display: block; }
         .predictive-item { padding: 12px 16px; border-bottom: 1px solid #f5eef5; cursor: pointer; transition: background 0.2s ease; }
@@ -1289,7 +903,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .loading-predictions .spinner { width: 24px; height: 24px; border: 3px solid #f0e8ee; border-top-color: #b40f7d; border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
         @keyframes spin { to { transform: rotate(360deg); } }
 
-        /* ===== AI ASSISTANT POPUP ===== */
         .ai-assistant-popup { position: fixed; bottom: 30px; right: 30px; background: #ffffff; border-radius: 16px; padding: 24px 28px; max-width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,0.15); border: 1px solid #f0e0ee; z-index: 9999; display: none; }
         .ai-assistant-popup.visible { display: block; }
         .ai-assistant-popup .popup-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
@@ -1301,7 +914,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .ai-assistant-popup .popup-actions .btn-help { padding: 8px 20px; background: #1a1a2e; color: #f0e8e8; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; text-decoration: none; }
         .ai-assistant-popup .popup-actions .btn-dismiss { padding: 8px 20px; background: #f0e8ee; color: #4a3a4a; border: none; border-radius: 8px; cursor: pointer; font-size: 13px; font-weight: 500; }
 
-        /* ===== SEARCH INFO BADGES ===== */
         .search-info { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
         .search-type-badge { font-size: 12px; padding: 4px 14px; border-radius: 20px; font-weight: 500; background: #f0e8ee; color: #4a3a4a; }
         .search-time { font-size: 12px; color: #b0a8b0; }
@@ -1310,33 +922,19 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             .stats-grid { grid-template-columns: repeat(4, 1fr); }
             .quick-actions { grid-template-columns: repeat(3, 1fr); }
         }
-
         @media (max-width: 992px) {
             .admin-content { padding: 80px 24px 24px; }
             .stats-grid { grid-template-columns: repeat(3, 1fr); }
             .analytics-grid { grid-template-columns: repeat(2, 1fr); }
             .quick-actions { grid-template-columns: repeat(3, 1fr); }
         }
-
         @media (max-width: 900px) {
             .top-header { left: 0 !important; right: 0 !important; padding: 0 12px; height: 56px; z-index: 1100; }
             .top-header.collapsed { left: 0 !important; }
-            .admin-sidebar {
-                top: 56px !important;
-                left: 0;
-                width: 280px !important;
-                height: calc(100vh - 56px) !important;
-                transform: translateX(-100%);
-                transition: transform 0.3s ease;
-                box-shadow: 6px 0 24px rgba(0,0,0,0.35);
-                z-index: 1050;
-            }
+            .admin-sidebar { top: 56px !important; left: 0; width: 280px !important; height: calc(100vh - 56px) !important; transform: translateX(-100%); transition: transform 0.3s ease; box-shadow: 6px 0 24px rgba(0,0,0,0.35); z-index: 1050; }
             .admin-sidebar.mobile-open { transform: translateX(0); }
             .admin-sidebar.collapsed { width: 280px !important; }
-            .admin-sidebar.collapsed .sidebar-header .school-name,
-            .admin-sidebar.collapsed .sidebar-header .school-sub,
-            .admin-sidebar.collapsed .sidebar-header .user-info,
-            .admin-sidebar.collapsed .sidebar-nav a .nav-label { display: block !important; }
+            .admin-sidebar.collapsed .sidebar-header .school-name, .admin-sidebar.collapsed .sidebar-header .school-sub, .admin-sidebar.collapsed .sidebar-header .user-info, .admin-sidebar.collapsed .sidebar-nav a .nav-label { display: block !important; }
             .admin-sidebar.collapsed .sidebar-nav a { justify-content: flex-start; padding: 11px 24px; font-size: 14px; }
             .admin-sidebar.collapsed .sidebar-nav a .nav-icon { font-size: 17px; }
             .admin-sidebar.collapsed .sidebar-header { padding: 20px 24px 16px; text-align: left; }
@@ -1348,7 +946,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             .admin-content.collapsed { margin-left: 0 !important; }
             .mobile-overlay { z-index: 1040; }
         }
-
         @media (max-width: 768px) {
             .top-header { padding: 0 10px; height: 54px; }
             .header-nav-symbols a { width: 34px; height: 34px; font-size: 15px; }
@@ -1377,7 +974,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             .book-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px; }
             .book-card .book-cover-wrapper { height: 170px; }
         }
-
         @media (max-width: 480px) {
             .top-header { padding: 0 8px; height: 52px; }
             .hamburger-btn { width: 34px; height: 34px; border-radius: 7px; }
@@ -1400,12 +996,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             .book-card .book-cover-wrapper { height: 220px; }
             .ai-assistant-popup { bottom: 12px; right: 12px; left: 12px; max-width: none; padding: 18px 20px; }
         }
-
         @media (hover: none) {
             .stat-card:hover, .quick-action-card:hover, .book-card:hover { transform: none; }
         }
-    
-        /* Shared dashboard hero header — matched to Teacher Dashboard */
+
         .dashboard-header {
             background: linear-gradient(135deg, #08080a 0%, #0a090a 30%, #d41688b0 60%, #ff0199a8 80%, #ff0199c9 100%) !important;
             padding: 25px 30px !important;
@@ -1435,73 +1029,249 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         .dashboard-header .header-left,
         .dashboard-header .header-left h1,
         .dashboard-header .header-left p,
-        .dashboard-header .header-time {
-            position: relative;
-            z-index: 1;
-        }
-        .dashboard-header .header-left h1 {
-            color: #fff !important;
-            font-size: 22px !important;
-            margin: 0 0 7px !important;
-            line-height: 1.25;
-        }
-        .dashboard-header .header-left p {
-            color: #f6d9ed !important;
-            margin: 0 !important;
-            font-size: 12px !important;
-        }
-        .dashboard-header .header-time {
-            text-align: right !important;
-            padding: 10px 16px !important;
-            border: 1px solid rgba(255,255,255,.17) !important;
-            border-radius: 10px !important;
-            background: rgba(255,255,255,.08) !important;
-            color: #fff !important;
-            min-width: 138px;
-        }
-        .dashboard-header .header-time .time {
-            display: block !important;
-            color: #fff !important;
-            font-size: 18px !important;
-            font-weight: 700 !important;
-            margin-bottom: 3px;
-        }
-        .dashboard-header .header-time .date {
-            display: block !important;
-            color: #fff !important;
-            font-size: 12px !important;
-        }
+        .dashboard-header .header-time { position: relative; z-index: 1; }
+        .dashboard-header .header-left h1 { color: #fff !important; font-size: 22px !important; margin: 0 0 7px !important; line-height: 1.25; }
+        .dashboard-header .header-left p { color: #f6d9ed !important; margin: 0 !important; font-size: 12px !important; }
+        .dashboard-header .header-time { text-align: right !important; padding: 10px 16px !important; border: 1px solid rgba(255,255,255,.17) !important; border-radius: 10px !important; background: rgba(255,255,255,.08) !important; color: #fff !important; min-width: 138px; }
+        .dashboard-header .header-time .time { display: block !important; color: #fff !important; font-size: 18px !important; font-weight: 700 !important; margin-bottom: 3px; }
+        .dashboard-header .header-time .date { display: block !important; color: #fff !important; font-size: 12px !important; }
         @media (max-width: 600px) {
             .dashboard-header { padding: 21px 20px !important; align-items: flex-start !important; }
             .dashboard-header .header-time { text-align: left !important; }
         }
 
-
-        /* Teacher-style decorative circle, explicitly layered behind header content */
-        .dashboard-content .dashboard-header {
-            isolation: isolate !important;
-        }
+        .dashboard-content .dashboard-header { isolation: isolate !important; }
         .dashboard-content .dashboard-header::before {
-            content: "" !important;
-            display: block !important;
-            position: absolute !important;
-            z-index: 0 !important;
-            width: 260px !important;
-            height: 260px !important;
-            border-radius: 50% !important;
-            right: 8% !important;
-            top: -150px !important;
-            background: rgba(255, 255, 255, .12) !important;
-            pointer-events: none !important;
+            content: "" !important; display: block !important; position: absolute !important;
+            z-index: 0 !important; width: 260px !important; height: 260px !important;
+            border-radius: 50% !important; right: 8% !important; top: -150px !important;
+            background: rgba(255, 255, 255, .12) !important; pointer-events: none !important;
         }
-        .dashboard-content .dashboard-header > * {
-            position: relative;
-            z-index: 1;
-        }
+        .dashboard-content .dashboard-header > * { position: relative; z-index: 1; }
 
-</style>
-    
-    <!-- Load Firebase and AI functions - path auto-detected -->
+        .top-header{box-sizing:border-box!important;right:0!important;width:auto!important;max-width:none!important;min-width:0!important;overflow:visible!important;gap:12px!important;padding-left:16px!important;padding-right:16px!important;}
+        .top-header.collapsed{left:70px!important;right:0!important;width:auto!important;}
+        .header-left-group{flex:0 0 auto!important;min-width:38px!important;}
+        .header-nav-symbols{display:flex!important;align-items:center!important;justify-content:flex-end!important;flex:1 1 auto!important;min-width:0!important;max-width:100%!important;gap:7px!important;overflow:visible!important;}
+        .header-nav-symbols a,.header-nav-symbols .header-action{flex:0 1 auto;min-width:36px;white-space:nowrap;}
+        .hamburger-btn{position:relative!important;z-index:2!important;flex:0 0 38px!important;visibility:visible!important;opacity:1!important;}
+        .top-header,.top-header *{color:inherit;}
+        .header-nav-symbols a,.header-nav-symbols .header-action{color:#f8eaf4!important;}
+        .header-nav-symbols a span,.header-nav-symbols .action-label{color:inherit!important;}
+        @media(max-width:1100px){
+         .top-header{gap:8px!important;padding-left:10px!important;padding-right:10px!important;}
+         .header-nav-symbols{gap:4px!important;}
+         .header-nav-symbols .action-label{display:none!important;}
+         .header-nav-symbols .header-action{width:38px!important;min-width:38px!important;padding:0!important;}
+        }
+        @media(max-width:900px){
+         .top-header,.top-header.collapsed{left:0!important;right:0!important;width:100%!important;max-width:100vw!important;}
+        }
+        @media(max-width:600px){
+         .top-header,.top-header.collapsed{left:0!important;right:0!important;width:100%!important;padding:0 8px!important;gap:6px!important;}
+         .header-nav-symbols{gap:2px!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important;}
+         .header-nav-symbols::-webkit-scrollbar{display:none!important;}
+         .header-nav-symbols a,.header-nav-symbols .header-action{width:32px!important;min-width:32px!important;height:34px!important;min-height:34px!important;}
+         .header-clock{display:none!important;}
+        }
+        body{transition:background-color .35s ease,color .35s ease}
+        body.theme-transition::before{content:"";position:fixed;z-index:99999;inset:0;pointer-events:none;background:radial-gradient(circle at var(--theme-x,90%) var(--theme-y,5%),rgba(212,22,136,.22),transparent 48%);animation:themeReveal .55s ease-out forwards}
+        @keyframes themeReveal{from{opacity:1;transform:scale(.65)}to{opacity:0;transform:scale(1.8)}}
+        @media(prefers-reduced-motion:reduce){body{transition:none!important}body.theme-transition::before{animation:none}}
+
+        /* ============================================================
+           UNIVERSAL DARK MODE FIX
+           Forces all text to readable light colors in dark mode.
+           ============================================================ */
+        :root{
+          --dm-bg:#0f0e13;
+          --dm-surface:#1a1720;
+          --dm-surface-2:#221d2a;
+          --dm-border:#3a2e3d;
+          --dm-text:#f3edf5;
+          --dm-text-muted:#c2b3c6;
+        }
+        body[data-theme="dark"]{
+          background:var(--dm-bg)!important;
+          color:var(--dm-text)!important;
+          color-scheme:dark;
+        }
+        body[data-theme="dark"] .admin-content,
+        body[data-theme="dark"] .dashboard-content{
+          background:var(--dm-bg)!important;
+          color:var(--dm-text)!important;
+        }
+        body[data-theme="dark"] h1,
+        body[data-theme="dark"] h2,
+        body[data-theme="dark"] h3,
+        body[data-theme="dark"] h4,
+        body[data-theme="dark"] h5,
+        body[data-theme="dark"] h6,
+        body[data-theme="dark"] p,
+        body[data-theme="dark"] span,
+        body[data-theme="dark"] label,
+        body[data-theme="dark"] small,
+        body[data-theme="dark"] td,
+        body[data-theme="dark"] th,
+        body[data-theme="dark"] li,
+        body[data-theme="dark"] strong,
+        body[data-theme="dark"] b,
+        body[data-theme="dark"] .book-title,
+        body[data-theme="dark"] .section-title,
+        body[data-theme="dark"] .stat-label,
+        body[data-theme="dark"] .request-title,
+        body[data-theme="dark"] .request-details,
+        body[data-theme="dark"] .book-author{
+          color:var(--dm-text)!important;
+        }
+        body[data-theme="dark"] .stat-sub,
+        body[data-theme="dark"] .muted,
+        body[data-theme="dark"] .subtle,
+        body[data-theme="dark"] .book-meta,
+        body[data-theme="dark"] .analytics-label,
+        body[data-theme="dark"] .no-data{
+          color:var(--dm-text-muted)!important;
+        }
+        body[data-theme="dark"] .stat-card,
+        body[data-theme="dark"] .panel,
+        body[data-theme="dark"] .card,
+        body[data-theme="dark"] .book-card,
+        body[data-theme="dark"] .table-container,
+        body[data-theme="dark"] .form-container,
+        body[data-theme="dark"] .content-card,
+        body[data-theme="dark"] .settings-card,
+        body[data-theme="dark"] .profile-container,
+        body[data-theme="dark"] .request-item,
+        body[data-theme="dark"] .analytics-summary,
+        body[data-theme="dark"] .quick-action-card,
+        body[data-theme="dark"] .modal,
+        body[data-theme="dark"] .modal-content,
+        body[data-theme="dark"] .request-form-container,
+        body[data-theme="dark"] .monthly-report-card,
+        body[data-theme="dark"] .admin-profile-modal,
+        body[data-theme="dark"] .admin-profile-item{
+          background:var(--dm-surface)!important;
+          color:var(--dm-text)!important;
+          border-color:var(--dm-border)!important;
+        }
+        body[data-theme="dark"] table,
+        body[data-theme="dark"] thead,
+        body[data-theme="dark"] tbody,
+        body[data-theme="dark"] tr{ background:transparent!important;color:var(--dm-text)!important; }
+        body[data-theme="dark"] th{ background:var(--dm-surface-2)!important;color:var(--dm-text)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] td{ color:var(--dm-text)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] tr:hover td{ background:rgba(255,255,255,.04)!important; }
+        body[data-theme="dark"] input,
+        body[data-theme="dark"] select,
+        body[data-theme="dark"] textarea{
+          background:var(--dm-surface-2)!important;color:#fff!important;border-color:var(--dm-border)!important;
+        }
+        body[data-theme="dark"] input::placeholder,
+        body[data-theme="dark"] textarea::placeholder{ color:#8f8296!important; }
+        body[data-theme="dark"] .search-bar .search-input-wrapper input{
+          background:var(--dm-surface-2)!important;color:#fff!important;border-color:var(--dm-border)!important;
+        }
+        body[data-theme="dark"] .predictive-results{ background:var(--dm-surface)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .predictive-item{ color:var(--dm-text)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .predictive-item:hover{ background:var(--dm-surface-2)!important; }
+        body[data-theme="dark"] .predictive-item .pred-title,
+        body[data-theme="dark"] .predictive-item .pred-author{ color:var(--dm-text)!important; }
+        /* Inline background overrides */
+        body[data-theme="dark"] [style*="background:#fff"],
+        body[data-theme="dark"] [style*="background: #fff"],
+        body[data-theme="dark"] [style*="background:white"],
+        body[data-theme="dark"] [style*="background: white"],
+        body[data-theme="dark"] [style*="background:#ffffff"],
+        body[data-theme="dark"] [style*="background: #ffffff"],
+        body[data-theme="dark"] [style*="background:#faf5fa"],
+        body[data-theme="dark"] [style*="background:#faf8f6"],
+        body[data-theme="dark"] [style*="background:#f5f3f0"],
+        body[data-theme="dark"] [style*="background:#f8f0f5"],
+        body[data-theme="dark"] [style*="background:#f5eef5"],
+        body[data-theme="dark"] [style*="background:#fbf5fa"],
+        body[data-theme="dark"] [style*="background:#fbf6fa"],
+        body[data-theme="dark"] [style*="background:#f7f1f5"]{
+          background:var(--dm-surface)!important;
+          color:var(--dm-text)!important;
+          border-color:var(--dm-border)!important;
+        }
+        /* Inline text overrides */
+        body[data-theme="dark"] [style*="color:#1a1a"],
+        body[data-theme="dark"] [style*="color: #1a1a"],
+        body[data-theme="dark"] [style*="color:#333"],
+        body[data-theme="dark"] [style*="color: #333"],
+        body[data-theme="dark"] [style*="color:#2a2a"],
+        body[data-theme="dark"] [style*="color:#4a3a"],
+        body[data-theme="dark"] [style*="color:#6a5a"],
+        body[data-theme="dark"] [style*="color:#766"],
+        body[data-theme="dark"] [style*="color:#8a7a"],
+        body[data-theme="dark"] [style*="color:#9a8a"],
+        body[data-theme="dark"] [style*="color:#211"],
+        body[data-theme="dark"] [style*="color:#171"]{
+          color:var(--dm-text)!important;
+        }
+        body[data-theme="dark"] .status-badge,
+        body[data-theme="dark"] .role-badge,
+        body[data-theme="dark"] .count-badge,
+        body[data-theme="dark"] .search-type-badge,
+        body[data-theme="dark"] .book-category,
+        body[data-theme="dark"] .relevance-score,
+        body[data-theme="dark"] .pred-badge{ color:#fff!important; }
+        body[data-theme="dark"] .book-card .book-cover-wrapper{ background:var(--dm-surface-2)!important; }
+        body[data-theme="dark"] .book-card .book-info .book-meta{ border-top-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .dashboard-header,
+        body[data-theme="dark"] .dashboard-header *,
+        body[data-theme="dark"] .hero,
+        body[data-theme="dark"] .hero *{ color:#fff!important; }
+        body[data-theme="dark"] .btn-cancel,
+        body[data-theme="dark"] .btn-secondary,
+        body[data-theme="dark"] .btn-light,
+        body[data-theme="dark"] .btn.light,
+        body[data-theme="dark"] .btn-edit,
+        body[data-theme="dark"] .btn-view-analytics{
+          background:var(--dm-surface-2)!important;color:var(--dm-text)!important;border-color:var(--dm-border)!important;
+        }
+        body[data-theme="dark"] .btn-delete,
+        body[data-theme="dark"] .btn-danger,
+        body[data-theme="dark"] .btn.danger{
+          background:rgba(180,35,66,.25)!important;color:#ffb3c4!important;border-color:rgba(180,35,66,.5)!important;
+        }
+        body[data-theme="dark"] .screen-toast{
+          background:var(--dm-surface)!important;color:var(--dm-text)!important;border-color:var(--dm-border)!important;
+        }
+        body[data-theme="dark"] .toast-copy{ color:var(--dm-text)!important; }
+        body[data-theme="dark"] .analytics-value,
+        body[data-theme="dark"] .stat-number,
+        body[data-theme="dark"] .analytics-header h2{ color:var(--dm-text)!important; }
+        body[data-theme="dark"] .progress-bar{ background:var(--dm-surface-2)!important; }
+        body[data-theme="dark"] .admin-profile-modal .profile-close-btn{ background:var(--dm-surface-2)!important;color:var(--dm-text)!important; }
+        body[data-theme="dark"] .admin-profile-avatar{ background:linear-gradient(135deg,#171018,#d41688)!important; }
+        body[data-theme="dark"] .admin-profile-item strong{ color:var(--dm-text)!important; }
+        body[data-theme="dark"] .admin-profile-item span{ color:var(--dm-text-muted)!important; }
+        body[data-theme="dark"] .message,
+        body[data-theme="dark"] .message.success,
+        body[data-theme="dark"] .message.error,
+        body[data-theme="dark"] .message.info{
+          background:var(--dm-surface-2)!important;color:var(--dm-text)!important;border-left-color:#ff0199!important;
+        }
+        body[data-theme="dark"] .cover-upload-container{ background:var(--dm-surface-2)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .cover-upload-container .cover-placeholder{ color:var(--dm-text-muted)!important; }
+        body[data-theme="dark"] .modal .form-group input,
+        body[data-theme="dark"] .modal .form-group select,
+        body[data-theme="dark"] .modal .form-group textarea{
+          background:var(--dm-surface-2)!important;color:#fff!important;border-color:var(--dm-border)!important;
+        }
+        body[data-theme="dark"] .user-action-message{ color:var(--dm-text-muted)!important; }
+        body[data-theme="dark"] .monthly-report-table th{ background:var(--dm-surface-2)!important;color:var(--dm-text)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .monthly-report-table td{ color:var(--dm-text)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .monthly-report-filter{ background:var(--dm-surface)!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .monthly-report-filter label{ color:var(--dm-text-muted)!important; }
+        body[data-theme="dark"] .monthly-report-filter select{ background:var(--dm-surface-2)!important;color:#fff!important;border-color:var(--dm-border)!important; }
+        body[data-theme="dark"] .monthly-report-bar{ background:var(--dm-surface-2)!important; }
+        body[data-theme="dark"] .monthly-report-empty{ color:var(--dm-text-muted)!important; }
+        body[data-theme="dark"] .monthly-report-title{ color:var(--dm-text)!important; }
+    </style>
+
     <script src="<?php echo $basePath; ?>/firebase_config.js"></script>
     <script src="<?php echo $basePath; ?>/ai_functions.js"></script>
     <script>
@@ -1513,9 +1283,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             } else {
                 console.error('❌ firebaseServices not available - check if firebase_config.js loaded');
             }
-        } catch (err) {
-            console.error('❌ Firebase init failed:', err);
-        }
+        } catch (err) { console.error('❌ Firebase init failed:', err); }
     });
     </script>
 </head>
@@ -1526,41 +1294,13 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <span class="hamburger-lines"><span></span><span></span><span></span></span>
             </button>
         </div>
-        <nav class="header-nav-symbols">
-            <a href="admin_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Dashboard">
-                <span>🗠</span>
-            </a>
-            <a href="admin_dashboard.php?section=users" class="<?php echo $section === 'users' ? 'active' : ''; ?>" title="Users">
-                <span>◈</span>
-            </a>
-            <a href="admin_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>" title="Books">
-                <span>🕮</span>
-            </a>
-            <a href="admin_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>" title="Borrowings">
-                <span>🕮🡪</span>
-            </a>
-            <a href="admin_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines">
-                <span>₱</span>
-            </a>
-            <a href="admin_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>" title="Requests">
-                <span>🖺</span>
-                <?php if (!empty($pendingRequests)): ?>
-                    <span class="header-badge"><?php echo count($pendingRequests); ?></span>
-                <?php endif; ?>
-            </a>
-            <a href="admin_dashboard.php?section=teacher_requests" class="<?php echo $section === 'teacher_requests' ? 'active' : ''; ?>" title="Teacher Bulk Requests">
-                <span>▤</span>
-                <?php if (!empty($pendingClassSetRequests)): ?><span class="header-badge"><?php echo count($pendingClassSetRequests); ?></span><?php endif; ?>
-            </a>
-            <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>" title="Search Books">
-                <span>⌕</span>
-            </a>
-            <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>" title="Reports">
-                <span>🖹</span>
-            </a>
-            <a href="admin_dashboard.php?section=settings" class="<?php echo $section === 'settings' ? 'active' : ''; ?>" title="Settings">
-                <span>⚙</span>
-            </a>
+        <nav class="header-nav-symbols" aria-label="Quick actions">
+            <span class="header-clock" id="adminLiveClock" aria-live="off">--:--:--</span>
+            <a class="header-action" href="admin_dashboard.php?section=settings" title="Admin Settings"><span class="action-icon">⚙</span><span class="action-label">Settings</span></a>
+            <button class="header-action" type="button" id="adminProfileButton" title="My profile"><span class="action-icon">◉</span><span class="action-label">Profile</span></button>
+            <button class="header-action" type="button" id="adminNotificationsButton" title="Notifications"><span class="action-icon">♧</span><span class="action-label">Notifications</span><?php $adminUnreadCount = count(array_filter($notifications ?? [], function($n){ return empty($n['is_read']); })); if ($adminUnreadCount > 0): ?><span class="header-badge"><?php echo $adminUnreadCount; ?></span><?php endif; ?></button>
+            <button class="header-action theme-action" type="button" id="adminThemeToggle" aria-pressed="false" title="Toggle light and dark mode"><span class="action-icon" id="adminThemeIcon">☾</span><span class="action-label" id="adminThemeLabel">Dark mode</span></button>
+            <a class="header-action logout-action" href="admin_logout.php" title="Logout"><span class="action-icon">↪</span><span class="action-label">Logout</span></a>
         </nav>
     </header>
 
@@ -1578,48 +1318,18 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 </div>
             </div>
             <nav class="sidebar-nav">
-                <!-- Administrator navigation stays directly in the sidebar. -->
-                <a href="admin_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Overview">
-                    <span class="nav-icon">▦</span><span class="nav-label">Overview</span>
-                </a>
-                <a href="admin_dashboard.php?section=users" class="<?php echo $section === 'users' ? 'active' : ''; ?>" title="User & Role Management">
-                    <span class="nav-icon">♙</span><span class="nav-label">User & Role Management</span>
-                </a>
-                <a href="admin_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>" title="Book & Catalog Management">
-                    <span class="nav-icon">▤</span><span class="nav-label">Book & Catalog Management</span>
-                </a>
-                <a href="admin_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>" title="Borrowings & Returns">
-                    <span class="nav-icon">↔</span><span class="nav-label">Borrowings & Returns</span>
-                </a>
-                <a href="admin_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines & Penalties">
-                    <span class="nav-icon">₱</span><span class="nav-label">Fines & Penalties</span>
-                </a>
-                <a href="admin_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>" title="Book Requests">
-                    <span class="nav-icon">▧</span><span class="nav-label">Book Requests</span>
-                    <?php if (!empty($pendingRequests)): ?><span class="request-count-badge"><?php echo count($pendingRequests); ?></span><?php endif; ?>
-                </a>
-                <a href="admin_dashboard.php?section=teacher_requests" class="<?php echo $section === 'teacher_requests' ? 'active' : ''; ?>" title="Teacher Class Set Requests">
-                    <span class="nav-icon">▥</span><span class="nav-label">Teacher Class Set Requests</span>
-                    <?php if (!empty($pendingClassSetRequests)): ?><span class="request-count-badge"><?php echo count($pendingClassSetRequests); ?></span><?php endif; ?>
-                </a>
-                <a href="admin_dashboard.php?section=purchase_requests" class="<?php echo $section === 'purchase_requests' ? 'active' : ''; ?>" title="Purchase Requests">
-                    <span class="nav-icon">🛒</span><span class="nav-label">Purchase Requests</span>
-                    <?php if (!empty($pendingPurchaseRequests)): ?><span class="request-count-badge"><?php echo count($pendingPurchaseRequests); ?></span><?php endif; ?>
-                </a>
-                <a href="admin_dashboard.php?section=reservations" class="<?php echo $section === 'reservations' ? 'active' : ''; ?>" title="Reservations">
-                    <span class="nav-icon">▣</span><span class="nav-label">Reservations</span>
-                </a>
-                <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>" title="Catalog Search">
-                    <span class="nav-icon">⌕</span><span class="nav-label">Catalog Search</span>
-                </a>
-                <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>" title="Reports & Analytics">
-                    <span class="nav-icon">▥</span><span class="nav-label">Reports & Analytics</span>
-                </a>
-                <a href="admin_dashboard.php?section=settings" class="<?php echo $section === 'settings' ? 'active' : ''; ?>" title="System Settings">
-                    <span class="nav-icon">⚙</span><span class="nav-label">System Settings</span>
-                </a>
-
-                <!-- All role workspaces are grouped under one dropdown on the admin dashboard. -->
+                <a href="admin_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Overview"><span class="nav-icon">▦</span><span class="nav-label">Overview</span></a>
+                <a href="admin_dashboard.php?section=users" class="<?php echo $section === 'users' ? 'active' : ''; ?>" title="User & Role Management"><span class="nav-icon">♙</span><span class="nav-label">User & Role Management</span></a>
+                <a href="admin_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>" title="Book & Catalog Management"><span class="nav-icon">▤</span><span class="nav-label">Book & Catalog Management</span></a>
+                <a href="admin_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>" title="Borrowings & Returns"><span class="nav-icon">↔</span><span class="nav-label">Borrowings & Returns</span></a>
+                <a href="admin_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines & Penalties"><span class="nav-icon">₱</span><span class="nav-label">Fines & Penalties</span></a>
+                <a href="admin_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>" title="Book Requests"><span class="nav-icon">▧</span><span class="nav-label">Book Requests</span><?php if (!empty($pendingRequests)): ?><span class="request-count-badge"><?php echo count($pendingRequests); ?></span><?php endif; ?></a>
+                <a href="admin_dashboard.php?section=teacher_requests" class="<?php echo $section === 'teacher_requests' ? 'active' : ''; ?>" title="Teacher Class Set Requests"><span class="nav-icon">▥</span><span class="nav-label">Teacher Class Set Requests</span><?php if (!empty($pendingClassSetRequests)): ?><span class="request-count-badge"><?php echo count($pendingClassSetRequests); ?></span><?php endif; ?></a>
+                <a href="admin_dashboard.php?section=purchase_requests" class="<?php echo $section === 'purchase_requests' ? 'active' : ''; ?>" title="Purchase Requests"><span class="nav-icon">🛒</span><span class="nav-label">Purchase Requests</span><?php if (!empty($pendingPurchaseRequests)): ?><span class="request-count-badge"><?php echo count($pendingPurchaseRequests); ?></span><?php endif; ?></a>
+                <a href="admin_dashboard.php?section=reservations" class="<?php echo $section === 'reservations' ? 'active' : ''; ?>" title="Reservations"><span class="nav-icon">▣</span><span class="nav-label">Reservations</span></a>
+                <a href="admin_dashboard.php?section=search" class="<?php echo $section === 'search' ? 'active' : ''; ?>" title="Catalog Search"><span class="nav-icon">⌕</span><span class="nav-label">Catalog Search</span></a>
+                <a href="admin_dashboard.php?section=reports" class="<?php echo $section === 'reports' ? 'active' : ''; ?>" title="Reports & Analytics"><span class="nav-icon">▥</span><span class="nav-label">Reports & Analytics</span></a>
+                <a href="admin_dashboard.php?section=settings" class="<?php echo $section === 'settings' ? 'active' : ''; ?>" title="System Settings"><span class="nav-icon">⚙</span><span class="nav-label">System Settings</span></a>
                 <div class="workspace-nav-group" id="workspacesNavGroup">
                     <button type="button" class="workspace-nav-toggle" aria-expanded="false" aria-controls="workspacesNavMenu" onclick="toggleSidebarGroup('workspacesNavGroup')">
                         <span class="nav-icon">▣</span><span class="nav-label">Workspaces</span><span class="workspace-chevron" aria-hidden="true">⌄</span>
@@ -1661,9 +1371,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 </div>
             </nav>
             <div class="sidebar-footer">
-                <a href="admin_logout.php" class="logout-btn" title="Logout">
-                    <span class="logout-text">Logout</span>
-                </a>
+                <a href="admin_logout.php" class="logout-btn" title="Logout"><span class="logout-text">Logout</span></a>
             </div>
         </div>
 
@@ -1692,35 +1400,17 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <div class="stat-label">Total Users</div>
                         <div class="stat-sub"><?php echo $stats['totalStudents']; ?> Students, <?php echo $stats['totalLibrarians']; ?> Librarians, <?php echo $stats['totalTeachers']; ?> Teachers</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number"><?php echo $stats['totalBooks']; ?></div>
-                        <div class="stat-label">Total Books</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number"><?php echo $stats['totalBorrowings']; ?></div>
-                        <div class="stat-label">Total Borrowings</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number"><?php echo min($present, 100); ?>%</div>
-                        <div class="stat-label">Active Borrowings</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number" style="<?php echo $stats['totalOverdue'] > 0 ? 'color:#8a2a5a;' : ''; ?>"><?php echo $stats['totalOverdue']; ?></div>
-                        <div class="stat-label">Overdue Books</div>
-                    </div>
-                    <div class="stat-card">
-                        <div class="stat-number"><?php echo $stats['totalReservations']; ?></div>
-                        <div class="stat-label">Reservations</div>
-                    </div>
+                    <div class="stat-card"><div class="stat-number"><?php echo $stats['totalBooks']; ?></div><div class="stat-label">Total Books</div></div>
+                    <div class="stat-card"><div class="stat-number"><?php echo $stats['totalBorrowings']; ?></div><div class="stat-label">Total Borrowings</div></div>
+                    <div class="stat-card"><div class="stat-number"><?php echo min($present, 100); ?>%</div><div class="stat-label">Active Borrowings</div></div>
+                    <div class="stat-card"><div class="stat-number" style="<?php echo $stats['totalOverdue'] > 0 ? 'color:#8a2a5a;' : ''; ?>"><?php echo $stats['totalOverdue']; ?></div><div class="stat-label">Overdue Books</div></div>
+                    <div class="stat-card"><div class="stat-number"><?php echo $stats['totalReservations']; ?></div><div class="stat-label">Reservations</div></div>
                     <div class="stat-card" onclick="window.location.href='admin_dashboard.php?section=purchase_requests'" style="cursor:pointer;">
                         <div class="stat-number"><?php echo count($pendingPurchaseRequests); ?></div>
                         <div class="stat-label">Pending Teacher Purchase Requests</div>
                         <div class="stat-sub">Click to review recommendations</div>
                     </div>
-                    <div class="stat-card">
-                        <div class="stat-number">₱<?php echo number_format($stats['totalFines'], 2); ?></div>
-                        <div class="stat-label">Total Fines</div>
-                    </div>
+                    <div class="stat-card"><div class="stat-number">₱<?php echo number_format($stats['totalFines'], 2); ?></div><div class="stat-label">Total Fines</div></div>
                 </div>
                 <div class="analytics-summary">
                     <div class="analytics-header">
@@ -1751,38 +1441,13 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     </div>
                 </div>
                 <div class="quick-actions">
-                    <a href="admin_dashboard.php?section=books" class="quick-action-card">
-                        <span class="action-icon">🕮</span>
-                        <span class="action-label">Add Book</span>
-                    </a>
-                    <a href="admin_dashboard.php?section=users" class="quick-action-card">
-                        <span class="action-icon">◈</span>
-                        <span class="action-label">Add User</span>
-                    </a>
-                    <a href="admin_dashboard.php?section=search" class="quick-action-card">
-                        <span class="action-icon">⌕</span>
-                        <span class="action-label">Search Books</span>
-                    </a>
-                    <a href="admin_dashboard.php?section=borrowings" class="quick-action-card">
-                        <span class="action-icon">⎘</span>
-                        <span class="action-label">Manage Borrowings</span>
-                    </a>
-                    <a href="admin_dashboard.php?section=reservations" class="quick-action-card">
-                        <span class="action-icon">⏱</span>
-                        <span class="action-label">Reservations</span>
-                    </a>
-                    <a href="admin_dashboard.php?section=purchase_requests" class="quick-action-card" style="position:relative;">
-                        <span class="action-icon">₱</span>
-                        <span class="action-label">Teacher Purchase Requests</span>
-                        <?php if (!empty($pendingPurchaseRequests)): ?><span class="action-badge"><?php echo count($pendingPurchaseRequests); ?></span><?php endif; ?>
-                    </a>
-                    <a href="admin_dashboard.php?section=requests" class="quick-action-card" style="position:relative;">
-                        <span class="action-icon">🖺</span>
-                        <span class="action-label">Manage Requests</span>
-                        <?php if (!empty($pendingRequests)): ?>
-                            <span class="action-badge"><?php echo count($pendingRequests); ?></span>
-                        <?php endif; ?>
-                    </a>
+                    <a href="admin_dashboard.php?section=books" class="quick-action-card"><span class="action-icon">🕮</span><span class="action-label">Add Book</span></a>
+                    <a href="admin_dashboard.php?section=users" class="quick-action-card"><span class="action-icon">◈</span><span class="action-label">Add User</span></a>
+                    <a href="admin_dashboard.php?section=search" class="quick-action-card"><span class="action-icon">⌕</span><span class="action-label">Search Books</span></a>
+                    <a href="admin_dashboard.php?section=borrowings" class="quick-action-card"><span class="action-icon">⎘</span><span class="action-label">Manage Borrowings</span></a>
+                    <a href="admin_dashboard.php?section=reservations" class="quick-action-card"><span class="action-icon">⏱</span><span class="action-label">Reservations</span></a>
+                    <a href="admin_dashboard.php?section=purchase_requests" class="quick-action-card" style="position:relative;"><span class="action-icon">₱</span><span class="action-label">Teacher Purchase Requests</span><?php if (!empty($pendingPurchaseRequests)): ?><span class="action-badge"><?php echo count($pendingPurchaseRequests); ?></span><?php endif; ?></a>
+                    <a href="admin_dashboard.php?section=requests" class="quick-action-card" style="position:relative;"><span class="action-icon">🖺</span><span class="action-label">Manage Requests</span><?php if (!empty($pendingRequests)): ?><span class="action-badge"><?php echo count($pendingRequests); ?></span><?php endif; ?></a>
                 </div>
                 <div class="analytics-summary" style="margin-top:22px;">
                     <div class="analytics-header"><h2>Teacher Purchase Request Notifications</h2><a href="admin_dashboard.php?section=purchase_requests" class="btn-view-analytics">View all requests →</a></div>
@@ -1790,13 +1455,13 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <?php if($recentPurchaseNotifications): ?>
                         <?php foreach($recentPurchaseNotifications as $purchaseNotice): ?>
                         <div style="padding:12px 4px;border-bottom:1px solid #f0e0ee;display:flex;justify-content:space-between;gap:12px;align-items:flex-start;">
-                            <div><strong><?php echo htmlspecialchars($purchaseNotice['title']??'Purchase request'); ?></strong><div style="font-size:13px;color:#766575;margin-top:4px;"><?php echo htmlspecialchars($purchaseNotice['message']??'A teacher submitted a purchase recommendation.'); ?></div><small style="color:#9a8a98;"><?php echo !empty($purchaseNotice['created_at'])?date('M d, Y g:i A',strtotime($purchaseNotice['created_at'])):'Recently'; ?></small></div>
+                            <div><strong><?php echo htmlspecialchars($purchaseNotice['title']??'Purchase request'); ?></strong><div style="font-size:13px;margin-top:4px;"><?php echo htmlspecialchars($purchaseNotice['message']??'A teacher submitted a purchase recommendation.'); ?></div><small><?php echo !empty($purchaseNotice['created_at'])?date('M d, Y g:i A',strtotime($purchaseNotice['created_at'])):'Recently'; ?></small></div>
                             <span class="count-badge"><?php echo !empty($purchaseNotice['is_read'])?'Read':'New'; ?></span>
                         </div>
                         <?php endforeach; ?>
                     <?php elseif($purchaseRequests): ?>
-                        <p style="color:#766575;font-size:13px;">There are <?php echo count($pendingPurchaseRequests); ?> pending teacher purchase recommendation(s). Open the request list to review them.</p>
-                    <?php else: ?><p style="color:#766575;font-size:13px;">No teacher purchase requests have been submitted yet.</p><?php endif; ?>
+                        <p style="font-size:13px;">There are <?php echo count($pendingPurchaseRequests); ?> pending teacher purchase recommendation(s). Open the request list to review them.</p>
+                    <?php else: ?><p style="font-size:13px;">No teacher purchase requests have been submitted yet.</p><?php endif; ?>
                 </div>
             </div>
 
@@ -1810,7 +1475,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <button onclick="openAddBookModal()" class="btn-add">+ Add Book</button>
                     </div>
                 </div>
-
                 <div class="search-bar">
                     <div class="search-input-wrapper">
                         <span class="search-icon">⌕</span>
@@ -1819,19 +1483,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     </div>
                     <span class="count-badge" id="bookCount"><?php echo count($filteredBooks); ?> books found</span>
                 </div>
-
                 <div class="table-container">
                     <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Cover</th>
-                                <th>Title</th>
-                                <th>Author</th>
-                                <th>Category</th>
-                                <th>Available</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
+                        <thead><tr><th>Cover</th><th>Title</th><th>Author</th><th>Category</th><th>Available</th><th>Actions</th></tr></thead>
                         <tbody>
                             <?php if (!empty($filteredBooks)): ?>
                                 <?php foreach ($filteredBooks as $b): 
@@ -1892,10 +1546,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                             <label>Cover Image</label>
                             <div class="cover-upload-container">
                                 <input type="file" id="coverImageInput" accept="image/*" onchange="handleCoverImageUpload(event)" class="cover-input">
-                                <div id="coverPlaceholder" class="cover-placeholder">
-                                    <span class="cover-icon">▣</span>
-                                    <span>No cover image selected</span>
-                                </div>
+                                <div id="coverPlaceholder" class="cover-placeholder"><span class="cover-icon">▣</span><span>No cover image selected</span></div>
                                 <div id="coverPreviewContainer" class="cover-preview-container" style="display:none;">
                                     <img id="coverPreview" class="cover-preview" alt="">
                                     <button type="button" onclick="removeCoverImage()" class="btn-remove-cover">✕</button>
@@ -1937,10 +1588,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                             <label>Cover Image</label>
                             <div class="cover-upload-container">
                                 <input type="file" id="editCoverImageInput" accept="image/*" onchange="handleEditCoverImageUpload(event)" class="cover-input">
-                                <div id="editCoverPlaceholder" class="cover-placeholder">
-                                    <span class="cover-icon">▣</span>
-                                    <span>No cover image selected</span>
-                                </div>
+                                <div id="editCoverPlaceholder" class="cover-placeholder"><span class="cover-icon">▣</span><span>No cover image selected</span></div>
                                 <div id="editCoverPreviewContainer" class="cover-preview-container" style="display:none;">
                                     <img id="editCoverPreview" class="cover-preview" alt="">
                                     <button type="button" onclick="removeEditCoverImage()" class="btn-remove-cover">✕</button>
@@ -1963,17 +1611,12 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <h1>Borrowings Management</h1>
                     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
                         <span class="count-badge">Total: <?php echo count($borrowings); ?></span>
-                        <?php if ($stats['totalOverdue'] > 0): ?>
-                            <span class="count-badge overdue-warning">⚠ <?php echo $stats['totalOverdue']; ?> Overdue</span>
-                        <?php endif; ?>
+                        <?php if ($stats['totalOverdue'] > 0): ?><span class="count-badge overdue-warning">⚠ <?php echo $stats['totalOverdue']; ?> Overdue</span><?php endif; ?>
                     </div>
                 </div>
-
                 <div class="table-container">
                     <table class="data-table">
-                        <thead>
-                            <tr><th>Book</th><th>User</th><th>User ID</th><th>Borrowed</th><th>Due Date</th><th>Status</th><th>Action</th></tr>
-                        </thead>
+                        <thead><tr><th>Book</th><th>User</th><th>User ID</th><th>Borrowed</th><th>Due Date</th><th>Status</th><th>Action</th></tr></thead>
                         <tbody>
                             <?php if (!empty($borrowings)): ?>
                                 <?php foreach ($borrowings as $b): ?>
@@ -1988,7 +1631,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                             <?php if (($b['status'] ?? '') !== 'Returned'): ?>
                                                 <a href="javascript:void(0);" class="btn-return" onclick="openReturnConfirm('<?php echo $b['id']; ?>', '<?php echo addslashes($b['book_title'] ?? 'Unknown'); ?>', '<?php echo addslashes($b['user_full_name'] ?? 'Unknown'); ?>', '<?php echo addslashes($b['user_display_id'] ?? 'N/A'); ?>', '<?php echo $b['due_date'] ?? ''; ?>')">Return</a>
                                             <?php else: ?>
-                                                <span style="color:#b0a8a0;font-size:12px;">Returned</span>
+                                                <span style="font-size:12px;">Returned</span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -2005,10 +1648,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <div class="modal" style="max-width:460px;">
                     <div style="text-align:center;font-size:48px;margin-bottom:16px;">📚</div>
                     <h3 style="text-align:center;">Return this book?</h3>
-                    <p style="text-align:center;color:#8a7a8a;margin-bottom:20px;">Please confirm that the student is returning the physical book.</p>
-                    <div style="background:#faf5fa;border-radius:10px;padding:14px 18px;border:1px solid #f0e0ee;margin-bottom:20px;">
+                    <p style="text-align:center;margin-bottom:20px;">Please confirm that the student is returning the physical book.</p>
+                    <div style="border-radius:10px;padding:14px 18px;border:1px solid #f0e0ee;margin-bottom:20px;">
                         <div id="returnBookTitle" style="font-weight:600;">Book Title</div>
-                        <div id="returnBookMeta" style="font-size:13px;color:#8a7a8a;">by Student • Due: —</div>
+                        <div id="returnBookMeta" style="font-size:13px;">by Student • Due: —</div>
                     </div>
                     <form method="GET" action="admin_dashboard.php" id="returnConfirmForm">
                         <input type="hidden" name="section" value="borrowings">
@@ -2037,12 +1680,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <button onclick="openModal('addFineModal')" class="btn-add" style="margin-left:10px;">+ Add Fine</button>
                     </div>
                 </div>
-
                 <div class="table-container">
                     <table class="data-table">
-                        <thead>
-                            <tr><th>Student</th><th>Student ID</th><th>Amount</th><th>Reason</th><th>Date</th><th>Status</th><th>Action</th></tr>
-                        </thead>
+                        <thead><tr><th>Student</th><th>Student ID</th><th>Amount</th><th>Reason</th><th>Date</th><th>Status</th><th>Action</th></tr></thead>
                         <tbody>
                             <?php if (!empty($fines)): ?>
                                 <?php foreach ($fines as $f): 
@@ -2050,13 +1690,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                     $studentDisplayId = 'N/A';
                                     if (isset($f['user_id'])) {
                                         $userRecord = supabaseRequest('users?select=full_name&id=eq.' . $f['user_id']);
-                                        if (!empty($userRecord)) {
-                                            $studentName = $userRecord[0]['full_name'] ?? 'Unknown';
-                                        }
+                                        if (!empty($userRecord)) { $studentName = $userRecord[0]['full_name'] ?? 'Unknown'; }
                                         $studentRecord = supabaseRequest('students?select=student_id&user_id=eq.' . $f['user_id']);
-                                        if (!empty($studentRecord)) {
-                                            $studentDisplayId = $studentRecord[0]['student_id'] ?? 'N/A';
-                                        }
+                                        if (!empty($studentRecord)) { $studentDisplayId = $studentRecord[0]['student_id'] ?? 'N/A'; }
                                     }
                                 ?>
                                     <tr>
@@ -2070,7 +1706,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                             <?php if (($f['status'] ?? '') !== 'Paid'): ?>
                                                 <button class="btn-pay" onclick="openPayConfirm('<?php echo $f['id']; ?>', '<?php echo addslashes($studentName); ?>', '<?php echo addslashes($studentDisplayId); ?>', '<?php echo number_format($f['amount'] ?? 0, 2); ?>', '<?php echo addslashes($f['reason'] ?? 'Late Return'); ?>')">Pay</button>
                                             <?php else: ?>
-                                                <span style="color:#b0a8a0;font-size:12px;">Paid</span>
+                                                <span style="font-size:12px;">Paid</span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -2123,12 +1759,12 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <div class="modal" style="max-width:460px;">
                     <div style="text-align:center;font-size:48px;margin-bottom:16px;">₱</div>
                     <h3 style="text-align:center;">Confirm Fine Payment</h3>
-                    <p style="text-align:center;color:#8a7a8a;margin-bottom:20px;">This will mark the fine as paid and cannot be undone.</p>
-                    <div style="background:#faf5fa;border-radius:10px;padding:14px 18px;border:1px solid #f0e0ee;margin-bottom:20px;">
-                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:#8a7a8a;">Student</span><span id="payStudentName" style="font-weight:500;">—</span></div>
-                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:#8a7a8a;">Student ID</span><span id="payStudentId" style="font-weight:500;">—</span></div>
-                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span style="color:#8a7a8a;">Reason</span><span id="payReason" style="font-weight:500;">—</span></div>
-                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #f0e0ee;margin-top:6px;padding-top:12px;"><span style="color:#8a7a8a;">Amount Due</span><span id="payAmount" style="font-weight:700;color:#b40f7d;font-size:16px;">₱0.00</span></div>
+                    <p style="text-align:center;margin-bottom:20px;">This will mark the fine as paid and cannot be undone.</p>
+                    <div style="border-radius:10px;padding:14px 18px;border:1px solid #f0e0ee;margin-bottom:20px;">
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span>Student</span><span id="payStudentName" style="font-weight:500;">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span>Student ID</span><span id="payStudentId" style="font-weight:500;">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;"><span>Reason</span><span id="payReason" style="font-weight:500;">—</span></div>
+                        <div style="display:flex;justify-content:space-between;padding:6px 0;border-top:1px solid #f0e0ee;margin-top:6px;padding-top:12px;"><span>Amount Due</span><span id="payAmount" style="font-weight:700;color:#b40f7d;font-size:16px;">₱0.00</span></div>
                     </div>
                     <form method="GET" action="admin_dashboard.php" id="payFineForm">
                         <input type="hidden" name="section" value="fines">
@@ -2242,9 +1878,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <?php if (!empty($purchaseRequests)): ?>
                 <div class="table-container"><table class="data-table"><thead><tr><th>Teacher</th><th>Requested Book</th><th>Author</th><th>Subject</th><th>Reason</th><th>Priority</th><th>Submitted</th><th>Status</th></tr></thead><tbody>
                 <?php foreach ($purchaseRequests as $purchase): $purchaseStatus=$purchase['status']??'Pending'; $purchaseStatusClass=in_array($purchaseStatus,['Approved','Ready'],true)?'status-approved':($purchaseStatus==='Rejected'?'status-rejected':'status-pending'); $purchaseDate=!empty($purchase['created_at'])?strtotime($purchase['created_at']):false; ?>
-                <tr><td><strong><?php echo htmlspecialchars($purchase['teacher_name']??'Unknown teacher'); ?></strong><br><small style="color:#8a7a8a;">ID: <?php echo htmlspecialchars((string)($purchase['teacher_id']??'—')); ?></small></td><td><strong><?php echo htmlspecialchars($purchase['requested_title']??'Untitled'); ?></strong></td><td><?php echo htmlspecialchars($purchase['author']??'—'); ?></td><td><?php echo htmlspecialchars($purchase['subject_name']??'—'); ?></td><td><div style="max-width:220px;white-space:normal;"><?php echo htmlspecialchars($purchase['reason']??'—'); ?></div></td><td><?php echo htmlspecialchars($purchase['priority']??'Normal'); ?></td><td><?php echo $purchaseDate?date('M d, Y',$purchaseDate):'—'; ?></td><td><span class="status-badge <?php echo $purchaseStatusClass; ?>"><?php echo htmlspecialchars($purchaseStatus); ?></span></td></tr>
+                <tr><td><strong><?php echo htmlspecialchars($purchase['teacher_name']??'Unknown teacher'); ?></strong><br><small>ID: <?php echo htmlspecialchars((string)($purchase['teacher_id']??'—')); ?></small></td><td><strong><?php echo htmlspecialchars($purchase['requested_title']??'Untitled'); ?></strong></td><td><?php echo htmlspecialchars($purchase['author']??'—'); ?></td><td><?php echo htmlspecialchars($purchase['subject_name']??'—'); ?></td><td><div style="max-width:220px;white-space:normal;"><?php echo htmlspecialchars($purchase['reason']??'—'); ?></div></td><td><?php echo htmlspecialchars($purchase['priority']??'Normal'); ?></td><td><?php echo $purchaseDate?date('M d, Y',$purchaseDate):'—'; ?></td><td><span class="status-badge <?php echo $purchaseStatusClass; ?>"><?php echo htmlspecialchars($purchaseStatus); ?></span></td></tr>
                 <?php endforeach; ?></tbody></table></div>
-                <?php else: ?><div style="background:#fff;border-radius:16px;padding:50px 30px;text-align:center;border:1px solid #f0e0ee;"><span style="font-size:48px;display:block;margin-bottom:12px;">₱</span><h3>No Purchase Requests Yet</h3><p style="color:#8a7a8a;">Teacher book purchase recommendations will appear here after submission.</p></div><?php endif; ?>
+                <?php else: ?><div style="border-radius:16px;padding:50px 30px;text-align:center;border:1px solid #f0e0ee;"><span style="font-size:48px;display:block;margin-bottom:12px;">₱</span><h3>No Purchase Requests Yet</h3><p>Teacher book purchase recommendations will appear here after submission.</p></div><?php endif; ?>
             </div>
 
             <?php elseif ($section === 'teacher_requests'): ?>
@@ -2264,24 +1900,24 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                 $submittedAt = !empty($request['created_at']) ? strtotime($request['created_at']) : false;
                             ?>
                                 <tr>
-                                    <td><strong><?php echo htmlspecialchars($request['teacher_name'] ?? 'Unknown teacher'); ?></strong><br><small style="color:#8a7a8a;">Teacher ID: <?php echo htmlspecialchars((string)($request['teacher_id'] ?? '—')); ?></small></td>
+                                    <td><strong><?php echo htmlspecialchars($request['teacher_name'] ?? 'Unknown teacher'); ?></strong><br><small>Teacher ID: <?php echo htmlspecialchars((string)($request['teacher_id'] ?? '—')); ?></small></td>
                                     <td><strong><?php echo htmlspecialchars($request['book_title'] ?? 'Untitled book'); ?></strong></td>
                                     <td><?php echo (int)($request['copies_requested'] ?? 0); ?></td>
                                     <td><?php echo htmlspecialchars(trim(($request['grade_level'] ?? '') . ' ' . ($request['class_section'] ?? '')) ?: '—'); ?></td>
                                     <td><?php echo htmlspecialchars(($request['needed_from'] ?? '—') . ' → ' . ($request['needed_until'] ?? '—')); ?></td>
                                     <td><div style="max-width:220px;white-space:normal;"><?php echo htmlspecialchars($request['purpose'] ?? '—'); ?></div></td>
                                     <td><?php echo $submittedAt ? date('M d, Y', $submittedAt) : '—'; ?></td>
-                                    <td><span class="status-badge <?php echo $statusClass; ?>"><?php echo htmlspecialchars($requestStatus); ?></span><?php if (!empty($request['review_notes'])): ?><br><small style="color:#8a7a8a;"><?php echo htmlspecialchars($request['review_notes']); ?></small><?php endif; ?></td>
+                                    <td><span class="status-badge <?php echo $statusClass; ?>"><?php echo htmlspecialchars($requestStatus); ?></span><?php if (!empty($request['review_notes'])): ?><br><small><?php echo htmlspecialchars($request['review_notes']); ?></small><?php endif; ?></td>
                                 </tr>
                             <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
                 <?php else: ?>
-                    <div style="background:#ffffff;border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;">
+                    <div style="border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;">
                         <span style="font-size:56px;display:block;margin-bottom:16px;opacity:.4;">▤</span>
-                        <h3 style="color:#1a1a2e;margin-bottom:8px;">No Teacher Bulk Requests Yet</h3>
-                        <p style="color:#8a7a8a;font-size:15px;">Teacher class-set requests will appear here after they are submitted.</p>
+                        <h3 style="margin-bottom:8px;">No Teacher Bulk Requests Yet</h3>
+                        <p style="font-size:15px;">Teacher class-set requests will appear here after they are submitted.</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -2290,9 +1926,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             <div class="requests-management">
                 <div class="section-header">
                     <h1>Book Requests (<?php echo count($bookRequests); ?> total)</h1>
-                    <div class="header-actions">
-                        <span class="count-badge">Pending: <?php echo count($pendingRequests); ?></span>
-                    </div>
+                    <div class="header-actions"><span class="count-badge">Pending: <?php echo count($pendingRequests); ?></span></div>
                 </div>
                 <div class="search-bar">
                     <div class="search-input-wrapper">
@@ -2308,13 +1942,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     </select>
                     <span class="count-badge"><?php echo count($filteredRequests); ?> requests found</span>
                 </div>
-
                 <?php if (!empty($filteredRequests)): ?>
                     <div class="table-container">
                         <table class="data-table">
-                            <thead>
-                                <tr><th>Student</th><th>Book</th><th>Type</th><th>Year/Section</th><th>Purpose</th><th>Date</th><th>Status</th><th>Actions</th></tr>
-                            </thead>
+                            <thead><tr><th>Student</th><th>Book</th><th>Type</th><th>Year/Section</th><th>Purpose</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
                             <tbody>
                                 <?php foreach ($filteredRequests as $r): 
                                     $isPending = ($r['status'] ?? '') === 'Pending';
@@ -2323,11 +1954,11 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                     $isFulfilled = ($r['status'] ?? '') === 'Fulfilled';
                                 ?>
                                     <tr>
-                                        <td><strong><?php echo htmlspecialchars($r['full_name'] ?? 'N/A'); ?></strong><br><small style="color:#8a7a8a;">ID: <?php echo htmlspecialchars($r['student_id'] ?? 'N/A'); ?></small></td>
-                                        <td><strong><?php echo htmlspecialchars($r['book_title'] ?? 'N/A'); ?></strong><br><small style="color:#8a7a8a;">by <?php echo htmlspecialchars($r['book_author'] ?? 'N/A'); ?></small></td>
+                                        <td><strong><?php echo htmlspecialchars($r['full_name'] ?? 'N/A'); ?></strong><br><small>ID: <?php echo htmlspecialchars($r['student_id'] ?? 'N/A'); ?></small></td>
+                                        <td><strong><?php echo htmlspecialchars($r['book_title'] ?? 'N/A'); ?></strong><br><small>by <?php echo htmlspecialchars($r['book_author'] ?? 'N/A'); ?></small></td>
                                         <td><span class="status-badge status-pending"><?php echo ucfirst($r['request_type'] ?? 'borrow'); ?></span></td>
-                                        <td><?php echo htmlspecialchars($r['year_level'] ?? 'N/A'); ?><br><small style="color:#8a7a8a;"><?php echo htmlspecialchars($r['section'] ?? 'N/A'); ?></small></td>
-                                        <td><div style="max-width:150px;font-size:13px;color:#6a5a6a;"><?php echo htmlspecialchars(substr($r['purpose'] ?? '', 0, 50)) . (strlen($r['purpose'] ?? '') > 50 ? '...' : ''); ?></div></td>
+                                        <td><?php echo htmlspecialchars($r['year_level'] ?? 'N/A'); ?><br><small><?php echo htmlspecialchars($r['section'] ?? 'N/A'); ?></small></td>
+                                        <td><div style="max-width:150px;font-size:13px;"><?php echo htmlspecialchars(substr($r['purpose'] ?? '', 0, 50)) . (strlen($r['purpose'] ?? '') > 50 ? '...' : ''); ?></div></td>
                                         <td><?php echo date('M d, Y', strtotime($r['created_at'] ?? 'now')); ?></td>
                                         <td><span class="status-badge <?php echo $isPending ? 'status-pending' : ($isApproved ? 'status-approved' : ($isRejected ? 'status-rejected' : 'status-fulfilled')); ?>"><?php echo $r['status'] ?? 'Pending'; ?></span></td>
                                         <td>
@@ -2335,7 +1966,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                                 <button class="btn-edit" onclick="openApproveModal('<?php echo $r['id']; ?>', '<?php echo addslashes($r['full_name']); ?>', '<?php echo addslashes($r['book_title']); ?>')">Approve</button>
                                                 <button class="btn-delete" onclick="openRejectModal('<?php echo $r['id']; ?>', '<?php echo addslashes($r['full_name']); ?>', '<?php echo addslashes($r['book_title']); ?>')">Reject</button>
                                             <?php else: ?>
-                                                <span style="color:#b0a8a0;font-size:12px;"><?php echo $r['status']; ?></span>
+                                                <span style="font-size:12px;"><?php echo $r['status']; ?></span>
                                             <?php endif; ?>
                                         </td>
                                     </tr>
@@ -2344,10 +1975,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         </table>
                     </div>
                 <?php else: ?>
-                    <div style="background:#ffffff;border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;">
+                    <div style="border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;">
                         <span style="font-size:56px;display:block;margin-bottom:16px;opacity:0.4;">📋</span>
-                        <h3 style="color:#1a1a2e;margin-bottom:8px;">No Requests Found</h3>
-                        <p style="color:#8a7a8a;font-size:15px;">No book requests have been submitted yet.</p>
+                        <h3 style="margin-bottom:8px;">No Requests Found</h3>
+                        <p style="font-size:15px;">No book requests have been submitted yet.</p>
                     </div>
                 <?php endif; ?>
             </div>
@@ -2355,7 +1986,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             <div class="modal-overlay" id="approveModal">
                 <div class="modal">
                     <h3>✅ Approve Request</h3>
-                    <div style="background:#f0e8ee;border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #b40f7d;">
+                    <div style="border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #b40f7d;">
                         <p style="margin:0;font-size:14px;"><strong>Student:</strong> <span id="approveStudentName">—</span></p>
                         <p style="margin:4px 0 0;font-size:14px;"><strong>Book:</strong> <span id="approveBookTitle">—</span></p>
                     </div>
@@ -2375,7 +2006,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             <div class="modal-overlay" id="rejectModal">
                 <div class="modal">
                     <h3>❌ Reject Request</h3>
-                    <div style="background:#f0e0e8;border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #d460b8;">
+                    <div style="border-radius:12px;padding:16px 20px;margin-bottom:20px;border-left:4px solid #d460b8;">
                         <p style="margin:0;font-size:14px;"><strong>Student:</strong> <span id="rejectStudentName">—</span></p>
                         <p style="margin:4px 0 0;font-size:14px;"><strong>Book:</strong> <span id="rejectBookTitle">—</span></p>
                     </div>
@@ -2398,13 +2029,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     <h1>Reservations Management</h1>
                     <span class="count-badge">Total: <?php echo count($reservations); ?> reservations</span>
                 </div>
-
                 <?php if (!empty($reservations)): ?>
                     <div class="table-container">
                         <table class="data-table">
-                            <thead>
-                                <tr><th>Book</th><th>Student</th><th>Student ID</th><th>Reserved</th><th>Expiry</th><th>Status</th></tr>
-                            </thead>
+                            <thead><tr><th>Book</th><th>Student</th><th>Student ID</th><th>Reserved</th><th>Expiry</th><th>Status</th></tr></thead>
                             <tbody>
                                 <?php foreach ($reservations as $r): 
                                     $bookTitle = isset($r['books']['title']) ? $r['books']['title'] : 'Unknown';
@@ -2431,57 +2059,50 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         </table>
                     </div>
                 <?php else: ?>
-                    <div style="background:#ffffff;border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;">
+                    <div style="border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;">
                         <span style="font-size:56px;display:block;margin-bottom:16px;opacity:0.4;">⏱</span>
-                        <h3 style="color:#1a1a2e;margin-bottom:8px;">No Reservations</h3>
-                        <p style="color:#8a7a8a;font-size:15px;">No book reservations have been made yet.</p>
+                        <h3 style="margin-bottom:8px;">No Reservations</h3>
+                        <p style="font-size:15px;">No book reservations have been made yet.</p>
                     </div>
                 <?php endif; ?>
             </div>
 
             <?php elseif ($section === 'student_profiles'): ?>
                 <div class="section-header"><div><h1>Student Profiles</h1><p>Administrator view of student directory and linked account details.</p></div></div>
-                <div class="table-container" style="background:#fff;border:1px solid #f0e0ee;border-radius:14px;padding:18px;overflow-x:auto;">
+                <div class="table-container" style="border:1px solid #f0e0ee;border-radius:14px;padding:18px;overflow-x:auto;">
                     <table class="data-table" style="width:100%;border-collapse:collapse;"><thead><tr><th>Student</th><th>Student ID</th><th>Year / Grade</th><th>Section</th><th>Email</th><th>Account ID</th></tr></thead><tbody>
                     <?php if (!empty($students)): foreach ($students as $studentRow): $studentUser = $studentRow['users'] ?? []; ?>
                         <tr><td><?php echo htmlspecialchars($studentUser['full_name'] ?? 'Student account'); ?></td><td><?php echo htmlspecialchars($studentRow['student_id'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentRow['year_level'] ?? $studentRow['grade_level'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentRow['section'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentUser['email'] ?? '—'); ?></td><td><?php echo htmlspecialchars($studentUser['user_id'] ?? $studentRow['user_id'] ?? '—'); ?></td></tr>
-                    <?php endforeach; else: ?><tr><td colspan="6" style="text-align:center;padding:25px;color:#887988;">No student profiles found.</td></tr><?php endif; ?>
+                    <?php endforeach; else: ?><tr><td colspan="6" style="text-align:center;padding:25px;">No student profiles found.</td></tr><?php endif; ?>
                     </tbody></table>
                 </div>
 
             <?php elseif ($section === 'search'): ?>
-            <!-- ===== AI BOOK SEARCH - SAME AS STUDENT ===== -->
             <div class="book-management">
                 <div class="section-header">
                     <h1>Search Books</h1>
                     <div class="search-info">
                         <span class="search-type-badge" id="searchTypeBadge" style="display:none;">🧠 AI Search</span>
                         <span class="count-badge">Books: <strong id="resultCount"><?php echo count($books); ?></strong></span>
-                        <span id="aiStatus" style="font-size:12px;color:#8a7a8a;">🤖 Initializing AI...</span>
+                        <span id="aiStatus" style="font-size:12px;">🤖 Initializing AI...</span>
                     </div>
                 </div>
-
                 <div class="search-bar">
                     <div class="search-input-wrapper">
                         <span class="search-icon">⌕</span>
-                        <input type="text" id="searchInput" 
-                               placeholder="Search by title, author, or describe what you need..."
-                               value="<?php echo htmlspecialchars($searchQuery); ?>"
-                               onkeydown="if(event.key==='Enter'){event.preventDefault(); performSearch();}">
+                        <input type="text" id="searchInput" placeholder="Search by title, author, or describe what you need..." value="<?php echo htmlspecialchars($searchQuery); ?>" onkeydown="if(event.key==='Enter'){event.preventDefault(); performSearch();}">
                         <button class="clear-btn" id="clearSearchBtn" onclick="clearSearch()">✕</button>
                         <div class="predictive-results" id="predictiveResults"></div>
                     </div>
                     <button onclick="performSearch()" style="padding:12px 24px;background:#1a1a2e;color:#f0e8e8;border:none;border-radius:10px;cursor:pointer;font-size:14px;font-weight:500;">Search</button>
                 </div>
-
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;">
-                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('programming')">Programming</span>
-                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('history')">History</span>
-                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('science')">Science</span>
-                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('psychology')">Psychology</span>
-                    <span style="padding:6px 16px;background:#ffffff;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;color:#6a5a4e;cursor:pointer;" onclick="quickSearch('fiction')">Fiction</span>
+                    <span style="padding:6px 16px;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;cursor:pointer;" onclick="quickSearch('programming')">Programming</span>
+                    <span style="padding:6px 16px;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;cursor:pointer;" onclick="quickSearch('history')">History</span>
+                    <span style="padding:6px 16px;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;cursor:pointer;" onclick="quickSearch('science')">Science</span>
+                    <span style="padding:6px 16px;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;cursor:pointer;" onclick="quickSearch('psychology')">Psychology</span>
+                    <span style="padding:6px 16px;border:1px solid #f0e0ee;border-radius:20px;font-size:13px;cursor:pointer;" onclick="quickSearch('fiction')">Fiction</span>
                 </div>
-
                 <div class="book-grid" id="bookGrid">
                     <?php foreach ($books as $book): 
                         $categoryName = isset($book['categories']['name']) ? $book['categories']['name'] : (isset($book['category_id']) && isset($catMap[$book['category_id']]) ? $catMap[$book['category_id']] : 'Uncategorized');
@@ -2497,13 +2118,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                                 <?php if ($hasCover): ?>
                                     <img src="<?php echo htmlspecialchars($coverImage); ?>" alt="<?php echo htmlspecialchars($title); ?>">
                                 <?php else: ?>
-                                    <div class="cover-placeholder" style="background-color:<?php echo getPlaceholderColor($bookId); ?>;">
-                                        <span class="initial"><?php echo strtoupper(substr($title, 0, 1)); ?></span>
-                                    </div>
+                                    <div class="cover-placeholder" style="background-color:<?php echo getPlaceholderColor($bookId); ?>;"><span class="initial"><?php echo strtoupper(substr($title, 0, 1)); ?></span></div>
                                 <?php endif; ?>
-                                <span class="availability-badge <?php echo $available <= 0 ? 'none' : ($available <= 2 ? 'low' : ''); ?>">
-                                    <?php echo $available <= 0 ? 'Not Available' : ($available <= 2 ? 'Low Stock' : 'Available'); ?>
-                                </span>
+                                <span class="availability-badge <?php echo $available <= 0 ? 'none' : ($available <= 2 ? 'low' : ''); ?>"><?php echo $available <= 0 ? 'Not Available' : ($available <= 2 ? 'Low Stock' : 'Available'); ?></span>
                             </div>
                             <div class="book-info">
                                 <h3 class="book-title"><?php echo htmlspecialchars($title); ?></h3>
@@ -2523,24 +2140,14 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
 
             <?php elseif ($section === 'reports'): ?>
             <?php
-                // Monthly analytics are calculated from the existing borrowings records.
-                // Each row represents one borrowing transaction, including transactions later returned.
                 $requestedMonth = isset($_GET['report_month']) ? (string)$_GET['report_month'] : date('Y-m');
-                if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth)) {
-                    $requestedMonth = date('Y-m');
-                }
+                if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/', $requestedMonth)) { $requestedMonth = date('Y-m'); }
                 $selectedMonthStart = DateTime::createFromFormat('!Y-m-d', $requestedMonth . '-01');
-                if (!$selectedMonthStart) {
-                    $requestedMonth = date('Y-m');
-                    $selectedMonthStart = DateTime::createFromFormat('!Y-m-d', $requestedMonth . '-01');
-                }
+                if (!$selectedMonthStart) { $requestedMonth = date('Y-m'); $selectedMonthStart = DateTime::createFromFormat('!Y-m-d', $requestedMonth . '-01'); }
                 $selectedMonthLabel = $selectedMonthStart->format('F Y');
-                $monthlyBorrowings = [];
-                $topBooks = [];
-                $topBorrowers = [];
+                $monthlyBorrowings = []; $topBooks = []; $topBorrowers = [];
                 $monthOptions = [$requestedMonth => $selectedMonthLabel];
                 $trendCounts = [];
-
                 foreach (($borrowings ?? []) as $borrowingRow) {
                     $borrowDateRaw = $borrowingRow['borrow_date'] ?? '';
                     $borrowTimestamp = $borrowDateRaw ? strtotime($borrowDateRaw) : false;
@@ -2549,32 +2156,20 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     $monthOptions[$rowMonth] = date('F Y', $borrowTimestamp);
                     if ($rowMonth !== $requestedMonth) continue;
                     $monthlyBorrowings[] = $borrowingRow;
-
                     $bookKey = (string)($borrowingRow['book_id'] ?? ($borrowingRow['book_title'] ?? 'unknown-book'));
                     if (!isset($topBooks[$bookKey])) {
-                        $topBooks[$bookKey] = [
-                            'title' => $borrowingRow['book_title'] ?? ($borrowingRow['books']['title'] ?? 'Unknown Book'),
-                            'author' => $borrowingRow['books']['author'] ?? '',
-                            'count' => 0
-                        ];
+                        $topBooks[$bookKey] = ['title' => $borrowingRow['book_title'] ?? ($borrowingRow['books']['title'] ?? 'Unknown Book'), 'author' => $borrowingRow['books']['author'] ?? '', 'count' => 0];
                     }
                     $topBooks[$bookKey]['count']++;
-
                     $borrowerKey = (string)($borrowingRow['user_id'] ?? ($borrowingRow['user_full_name'] ?? 'unknown-borrower'));
                     if (!isset($topBorrowers[$borrowerKey])) {
-                        $topBorrowers[$borrowerKey] = [
-                            'name' => $borrowingRow['user_full_name'] ?? ($borrowingRow['users']['full_name'] ?? 'Unknown Borrower'),
-                            'user_code' => $borrowingRow['user_display_id'] ?? ($borrowingRow['users']['user_id'] ?? ''),
-                            'count' => 0
-                        ];
+                        $topBorrowers[$borrowerKey] = ['name' => $borrowingRow['user_full_name'] ?? ($borrowingRow['users']['full_name'] ?? 'Unknown Borrower'), 'user_code' => $borrowingRow['user_display_id'] ?? ($borrowingRow['users']['user_id'] ?? ''), 'count' => 0];
                     }
                     $topBorrowers[$borrowerKey]['count']++;
                 }
                 uasort($topBooks, function($a, $b) { return $b['count'] <=> $a['count']; });
                 uasort($topBorrowers, function($a, $b) { return $b['count'] <=> $a['count']; });
                 krsort($monthOptions);
-
-                // Show a 12-month trend ending in the selected month.
                 $trendStart = clone $selectedMonthStart;
                 $trendStart->modify('-11 months');
                 $maxTrendCount = 1;
@@ -2593,30 +2188,29 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 $uniqueMonthlyBorrowers = count($topBorrowers);
                 $uniqueMonthlyBooks = count($topBooks);
                 $topBook = !empty($topBooks) ? reset($topBooks) : null;
-                $topBorrower = !empty($topBorrowers) ? reset($topBorrowers) : null;
             ?>
             <div class="reports-content" style="padding:4px 0 28px;">
                 <style>
                     .monthly-report-card{background:#fff;border:1px solid #f0e0ee;border-radius:14px;padding:20px 22px;box-shadow:0 3px 12px rgba(80,20,60,.035);}
                     .monthly-report-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(205px,1fr));gap:16px;margin:18px 0 24px;}
-                    .monthly-report-card h3{font-size:25px;margin:0;color:#171323;}
-                    .monthly-report-card p{margin:6px 0 0;color:#8a7a8a;font-size:13px;}
-                    .monthly-report-title{font-size:16px;font-weight:700;color:#191526;margin:0 0 16px;}
+                    .monthly-report-card h3{font-size:25px;margin:0;}
+                    .monthly-report-card p{margin:6px 0 0;font-size:13px;}
+                    .monthly-report-title{font-size:16px;font-weight:700;margin:0 0 16px;}
                     .monthly-report-table{width:100%;border-collapse:collapse;}
-                    .monthly-report-table th{background:#fbf5fa;color:#68566a;text-align:left;font-size:12px;padding:12px 14px;}
-                    .monthly-report-table td{padding:12px 14px;border-top:1px solid #f2eaf1;color:#30283a;font-size:13px;}
+                    .monthly-report-table th{text-align:left;font-size:12px;padding:12px 14px;}
+                    .monthly-report-table td{padding:12px 14px;border-top:1px solid #f2eaf1;font-size:13px;}
                     .monthly-report-rank{display:inline-flex;align-items:center;justify-content:center;width:25px;height:25px;border-radius:50%;background:#f7e5f1;color:#a10b70;font-weight:700;margin-right:8px;}
                     .monthly-report-bar{height:9px;background:#f3e8f0;border-radius:20px;overflow:hidden;min-width:75px;}
                     .monthly-report-bar span{display:block;height:100%;background:linear-gradient(90deg,#b40f7d,#ff0199);border-radius:20px;}
-                    .monthly-report-filter{display:flex;align-items:end;gap:12px;flex-wrap:wrap;background:#fff;border:1px solid #f0e0ee;border-radius:14px;padding:16px 18px;}
-                    .monthly-report-filter label{display:block;font-size:12px;color:#806e80;margin-bottom:6px;}
-                    .monthly-report-filter select{min-width:180px;padding:10px 12px;border:1px solid #ead8e7;border-radius:8px;background:#fff;color:#241a2b;}
+                    .monthly-report-filter{display:flex;align-items:end;gap:12px;flex-wrap:wrap;border:1px solid #f0e0ee;border-radius:14px;padding:16px 18px;}
+                    .monthly-report-filter label{display:block;font-size:12px;margin-bottom:6px;}
+                    .monthly-report-filter select{min-width:180px;padding:10px 12px;border:1px solid #ead8e7;border-radius:8px;}
                     .monthly-report-filter button{border:0;border-radius:8px;padding:11px 18px;background:#191526;color:#fff;font-weight:600;cursor:pointer;}
-                    .monthly-report-empty{text-align:center;padding:24px;color:#9a8b99;font-size:13px;}
+                    .monthly-report-empty{text-align:center;padding:24px;font-size:13px;}
                     @media(max-width:640px){.monthly-report-card{padding:16px}.monthly-report-table{min-width:520px}.monthly-table-scroll{overflow-x:auto}}
                 </style>
                 <div style="display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:18px;">
-                    <div><h1 style="margin:0 0 5px;color:#191526;font-size:25px;">Reports & Analytics</h1><p style="margin:0;color:#8a7a8a;font-size:13px;">Monthly borrowing performance and library usage</p></div>
+                    <div><h1 style="margin:0 0 5px;font-size:25px;">Reports & Analytics</h1><p style="margin:0;font-size:13px;">Monthly borrowing performance and library usage</p></div>
                     <a href="admin_dashboard.php?section=reports&action=export&format=excel&report_month=<?php echo urlencode($requestedMonth); ?>" class="btn-export">Export <?php echo htmlspecialchars($selectedMonthLabel); ?> Report</a>
                 </div>
                 <form class="monthly-report-filter" method="GET" action="admin_dashboard.php">
@@ -2627,16 +2221,14 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <?php endforeach; ?>
                     </select></div>
                     <button type="submit">View Monthly Report</button>
-                    <span style="color:#9a8b99;font-size:12px;">Based on borrowing dates recorded in the system</span>
+                    <span style="font-size:12px;">Based on borrowing dates recorded in the system</span>
                 </form>
-
                 <div class="monthly-report-grid">
                     <div class="monthly-report-card"><h3><?php echo count($monthlyBorrowings); ?></h3><p>Total borrowing transactions · <?php echo htmlspecialchars($selectedMonthLabel); ?></p></div>
                     <div class="monthly-report-card"><h3><?php echo $uniqueMonthlyBorrowers; ?></h3><p>Unique borrowers this month</p></div>
                     <div class="monthly-report-card"><h3><?php echo $uniqueMonthlyBooks; ?></h3><p>Different books borrowed</p></div>
                     <div class="monthly-report-card"><h3><?php echo $topBook ? (int)$topBook['count'] : 0; ?></h3><p>Most borrowed book copies/transactions</p></div>
                 </div>
-
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:18px;margin-bottom:20px;">
                     <section class="monthly-report-card">
                         <h2 class="monthly-report-title">Most Borrowed Books — <?php echo htmlspecialchars($selectedMonthLabel); ?></h2>
@@ -2659,16 +2251,14 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         <?php else: ?><div class="monthly-report-empty">No borrower records for this month.</div><?php endif; ?>
                     </section>
                 </div>
-
                 <section class="monthly-report-card" style="margin-bottom:20px;">
                     <h2 class="monthly-report-title">Borrowing Trend — 12 Months</h2>
                     <div style="display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:14px 18px;">
                         <?php foreach ($trendCounts as $trendMonth => $trendRow): $barWidth = (int)round(($trendRow['count'] / $maxTrendCount) * 100); ?>
-                            <div style="min-width:0;"><div style="display:flex;justify-content:space-between;gap:5px;font-size:11px;color:#776778;margin-bottom:7px;"><span><?php echo htmlspecialchars($trendRow['label']); ?></span><strong><?php echo (int)$trendRow['count']; ?></strong></div><div class="monthly-report-bar"><span style="width:<?php echo $barWidth; ?>%;"></span></div></div>
+                            <div style="min-width:0;"><div style="display:flex;justify-content:space-between;gap:5px;font-size:11px;margin-bottom:7px;"><span><?php echo htmlspecialchars($trendRow['label']); ?></span><strong><?php echo (int)$trendRow['count']; ?></strong></div><div class="monthly-report-bar"><span style="width:<?php echo $barWidth; ?>%;"></span></div></div>
                         <?php endforeach; ?>
                     </div>
                 </section>
-
                 <section class="monthly-report-card" style="margin-bottom:20px;">
                     <h2 class="monthly-report-title">Recent Borrowings — <?php echo htmlspecialchars($selectedMonthLabel); ?></h2>
                     <?php if (!empty($monthlyBorrowings)): ?>
@@ -2679,7 +2269,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                         </tbody></table></div>
                     <?php else: ?><div class="monthly-report-empty">No borrowing activity recorded for <?php echo htmlspecialchars($selectedMonthLabel); ?>.</div><?php endif; ?>
                 </section>
-
                 <section class="monthly-report-card">
                     <h2 class="monthly-report-title">All-Time Summary</h2>
                     <div class="monthly-report-grid" style="margin:0;">
@@ -2704,7 +2293,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 <?php echo json_encode((string)($_GET['msg_type'] ?? 'success')); ?>);
         });
         <?php endif; ?>
-        // ===== BOOK DATA FOR AI SEARCH =====
+
         const allBooks = <?php echo json_encode($books); ?>;
         const userId = '<?php echo $_SESSION['user_id']; ?>';
         const userGradeLevel = 'Admin';
@@ -2735,27 +2324,18 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             return colors[Math.abs(hash) % colors.length];
         }
 
-        // ===== AI SEARCH =====
         async function performSearch() {
             const searchInput = document.getElementById('searchInput');
             if (!searchInput) return;
-            
             const query = searchInput.value.trim();
-            if (!query) {
-                window.location.href = 'admin_dashboard.php?section=search';
-                return;
-            }
-
+            if (!query) { window.location.href = 'admin_dashboard.php?section=search'; return; }
             const grid = document.getElementById('bookGrid');
             const badge = document.getElementById('searchTypeBadge');
             const aiStatus = document.getElementById('aiStatus');
-
-            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;"><div style="width:40px;height:40px;border:3px solid #f0e8ee;border-top-color:#b40f7d;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div><p style="color:#8a7a8a;">AI is searching...</p></div>';
-            
+            grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;"><div style="width:40px;height:40px;border:3px solid #f0e8ee;border-top-color:#b40f7d;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div><p>AI is searching...</p></div>';
             badge.style.display = 'inline-block';
             badge.textContent = '🧠 Searching...';
             aiStatus.textContent = '🤖 AI analyzing...';
-
             try {
                 let results;
                 if (window.firebaseServices && window.firebaseServices.isReady && window.aiFunctions && window.aiFunctions.semanticSearch) {
@@ -2767,22 +2347,13 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                     aiStatus.textContent = '📝 Basic Search';
                     badge.textContent = '📝 Basic';
                 }
-                
                 renderSearchResults(results);
                 document.getElementById('resultCount').textContent = results.length;
-
                 searchSession.queries.push(query);
                 searchSession.clicks.push(0);
-                
                 if (searchSession.queries.length >= 3 && searchSession.queries.length % 3 === 0 && window.firebaseServices && window.firebaseServices.isReady && window.aiFunctions && window.aiFunctions.analyzeSession) {
-                    const analysis = await window.aiFunctions.analyzeSession(
-                        searchSession.queries,
-                        searchSession.clicks,
-                        searchSession.abandoned
-                    );
-                    if (analysis.frustration_detected && analysis.frustration_score > 50) {
-                        showFrustrationPopup(analysis);
-                    }
+                    const analysis = await window.aiFunctions.analyzeSession(searchSession.queries, searchSession.clicks, searchSession.abandoned);
+                    if (analysis.frustration_detected && analysis.frustration_score > 50) { showFrustrationPopup(analysis); }
                 }
             } catch (error) {
                 console.error('Search error:', error);
@@ -2805,12 +2376,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         function renderSearchResults(books) {
             const grid = document.getElementById('bookGrid');
             if (!grid) return;
-
             if (books.length === 0) {
-                grid.innerHTML = '<div style="grid-column:1/-1;background:#fff;border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;"><h3>No books found</h3><p style="color:#8a7a8a;margin-top:8px;">Try different keywords</p></div>';
+                grid.innerHTML = '<div style="grid-column:1/-1;border-radius:16px;padding:60px 40px;text-align:center;border:1px solid #f0e0ee;"><h3>No books found</h3><p style="margin-top:8px;">Try different keywords</p></div>';
                 return;
             }
-
             grid.innerHTML = books.map(book => {
                 const title = book.title || 'Unknown';
                 const author = book.author || 'Unknown';
@@ -2820,14 +2389,12 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
                 const bookId = book.id;
                 const coverImage = book.cover_image || '';
                 const hasCover = coverImage && coverImage.length > 100;
-
                 const safeTitle = title.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const safeAuthor = author.replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const safeIsbn = (book.isbn || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const safePublisher = (book.publisher || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const safeLocation = (book.location || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
                 const safeDescription = (book.description || '').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/\n/g, ' ');
-
                 return `
                     <div class="book-card" data-book-id="${bookId}">
                         <div class="book-cover-wrapper">
@@ -2856,38 +2423,21 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             }).join('');
         }
 
-        function quickSearch(query) {
-            document.getElementById('searchInput').value = query;
-            performSearch();
-        }
-
+        function quickSearch(query) { document.getElementById('searchInput').value = query; performSearch(); }
         function clearSearch() {
             document.getElementById('searchInput').value = '';
             document.getElementById('clearSearchBtn').classList.remove('visible');
             window.location.href = 'admin_dashboard.php?section=search';
         }
 
-        // ===== PREDICTIVE SEARCH =====
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('searchInput');
             const clearBtn = document.getElementById('clearSearchBtn');
-
             if (searchInput) {
                 searchInput.addEventListener('input', function() {
                     const query = this.value.trim();
-                    if (query.length > 0) {
-                        clearBtn.classList.add('visible');
-                    } else {
-                        clearBtn.classList.remove('visible');
-                        hidePredictions();
-                    }
-
-                    if (query.length >= 2) {
-                        clearTimeout(predictionTimeout);
-                        predictionTimeout = setTimeout(() => getPredictions(query), 400);
-                    } else {
-                        hidePredictions();
-                    }
+                    if (query.length > 0) { clearBtn.classList.add('visible'); } else { clearBtn.classList.remove('visible'); hidePredictions(); }
+                    if (query.length >= 2) { clearTimeout(predictionTimeout); predictionTimeout = setTimeout(() => getPredictions(query), 400); } else { hidePredictions(); }
                 });
             }
         });
@@ -2900,19 +2450,13 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             container.innerHTML = '<div class="loading-predictions"><div class="spinner"></div> Checking library catalog...</div>';
             container.classList.add('visible');
             try {
-                const response = await fetch('../../api/predict_search.php', {
-                    method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
-                    body: JSON.stringify({partial_query: query.trim()})
-                });
+                const response = await fetch('../../api/predict_search.php', { method: 'POST', headers: {'Content-Type': 'application/json', 'Accept': 'application/json'}, body: JSON.stringify({partial_query: query.trim()}) });
                 const payload = await response.json();
                 if (requestId !== predictionRequestId) return;
                 const predictions = Array.isArray(payload.predictions) ? payload.predictions : [];
                 container.replaceChildren();
                 if (!response.ok || payload.success !== true) throw new Error(payload.message || 'Catalog suggestions unavailable');
-                if (!predictions.length) {
-                    container.innerHTML = '<div style="padding:16px;text-align:center;color:#9a8a7e;">No matching books in the library catalog.</div>';
-                    return;
-                }
+                if (!predictions.length) { container.innerHTML = '<div style="padding:16px;text-align:center;">No matching books in the library catalog.</div>'; return; }
                 predictions.forEach(book => {
                     const item = document.createElement('button'); item.type = 'button'; item.className = 'predictive-item';
                     item.style.width = '100%'; item.style.textAlign = 'left'; item.style.border = '0'; item.style.background = 'transparent';
@@ -2927,47 +2471,26 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             } catch (error) {
                 if (requestId !== predictionRequestId) return;
                 console.error('Catalog prediction error:', error);
-                container.innerHTML = '<div style="padding:16px;text-align:center;color:#9a8a7e;">Could not load suggestions. You can still search.</div>';
+                container.innerHTML = '<div style="padding:16px;text-align:center;">Could not load suggestions. You can still search.</div>';
             }
         }
 
-        function selectPrediction(title) {
-            const input = document.getElementById('searchInput');
-            if (input) input.value = title;
-            hidePredictions();
-            performSearch();
-        }
-
-        function hidePredictions() {
-            predictionRequestId++;
-            const container = document.getElementById('predictiveResults');
-            if (container) { container.classList.remove('visible'); container.innerHTML = ''; }
-        }
+        function selectPrediction(title) { const input = document.getElementById('searchInput'); if (input) input.value = title; hidePredictions(); performSearch(); }
+        function hidePredictions() { predictionRequestId++; const container = document.getElementById('predictiveResults'); if (container) { container.classList.remove('visible'); container.innerHTML = ''; } }
 
         document.addEventListener('click', function(e) {
             const container = document.getElementById('predictiveResults');
             if (container && !container.contains(e.target)) {
                 const searchInput = document.getElementById('searchInput');
-                if (searchInput && !searchInput.contains(e.target)) {
-                    hidePredictions();
-                }
+                if (searchInput && !searchInput.contains(e.target)) { hidePredictions(); }
             }
         });
 
         function showFrustrationPopup(analysis) {
             let popup = document.getElementById('aiAssistantPopup');
-            if (!popup) {
-                popup = document.createElement('div');
-                popup.id = 'aiAssistantPopup';
-                popup.className = 'ai-assistant-popup';
-                document.body.appendChild(popup);
-            }
-
+            if (!popup) { popup = document.createElement('div'); popup.id = 'aiAssistantPopup'; popup.className = 'ai-assistant-popup'; document.body.appendChild(popup); }
             popup.innerHTML = `
-                <div class="popup-header">
-                    <h3>🤖 Research Assistant</h3>
-                    <button class="close-popup" onclick="closeFrustrationPopup()">×</button>
-                </div>
+                <div class="popup-header"><h3>🤖 Research Assistant</h3><button class="close-popup" onclick="closeFrustrationPopup()">×</button></div>
                 <div class="popup-body">
                     <p><strong>It looks like you're having some difficulty with your search.</strong></p>
                     <ul>${(analysis.reasons || []).map(r => `<li>${r}</li>`).join('')}</ul>
@@ -2981,27 +2504,17 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             popup.classList.add('visible');
         }
 
-        function closeFrustrationPopup() {
-            const popup = document.getElementById('aiAssistantPopup');
-            if (popup) popup.classList.remove('visible');
-        }
+        function closeFrustrationPopup() { const popup = document.getElementById('aiAssistantPopup'); if (popup) popup.classList.remove('visible'); }
 
         document.addEventListener('click', function(e) {
             const bookCard = e.target.closest('.book-card');
-            if (bookCard && searchSession.clicks.length > 0) {
-                searchSession.clicks[searchSession.clicks.length - 1]++;
-            }
+            if (bookCard && searchSession.clicks.length > 0) { searchSession.clicks[searchSession.clicks.length - 1]++; }
         });
 
-        // ===== COVER IMAGE HANDLING =====
         function handleCoverImageUpload(event) {
             const file = event.target.files[0];
             if (file) {
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('Image size should be less than 5MB');
-                    event.target.value = '';
-                    return;
-                }
+                if (file.size > 5 * 1024 * 1024) { alert('Image size should be less than 5MB'); event.target.value = ''; return; }
                 const reader = new FileReader();
                 reader.onloadend = function() {
                     document.getElementById('coverImageData').value = reader.result;
@@ -3024,11 +2537,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         function handleEditCoverImageUpload(event) {
             const file = event.target.files[0];
             if (file) {
-                if (file.size > 5 * 1024 * 1024) {
-                    alert('Image size should be less than 5MB');
-                    event.target.value = '';
-                    return;
-                }
+                if (file.size > 5 * 1024 * 1024) { alert('Image size should be less than 5MB'); event.target.value = ''; return; }
                 const reader = new FileReader();
                 reader.onloadend = function() {
                     document.getElementById('editCoverImageData').value = reader.result;
@@ -3060,31 +2569,22 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             document.getElementById('edit_available').value = available;
             document.getElementById('edit_location').value = location;
             document.getElementById('edit_description').value = description;
-            
             if (coverImage && coverImage.length > 100) {
                 document.getElementById('editCoverImageData').value = coverImage;
                 document.getElementById('editCoverPlaceholder').style.display = 'none';
                 document.getElementById('editCoverPreviewContainer').style.display = 'inline-block';
                 document.getElementById('editCoverPreview').src = coverImage;
-            } else {
-                removeEditCoverImage();
-            }
+            } else { removeEditCoverImage(); }
             openModal('editBookModal');
         }
 
-        // ===== OTHER SEARCH FUNCTIONS =====
         function searchBooks(query) {
             const clearBtn = document.getElementById('clearSearchBtn');
-            if (clearBtn) {
-                if (query.length > 0) clearBtn.classList.add('visible');
-                else clearBtn.classList.remove('visible');
-            }
-            
+            if (clearBtn) { if (query.length > 0) clearBtn.classList.add('visible'); else clearBtn.classList.remove('visible'); }
             clearTimeout(searchTimeout);
             searchTimeout = setTimeout(function() {
                 const url = new URL(window.location.href);
-                if (query.length > 0) url.searchParams.set('search', query);
-                else url.searchParams.delete('search');
+                if (query.length > 0) url.searchParams.set('search', query); else url.searchParams.delete('search');
                 window.location.href = url.toString();
             }, 400);
         }
@@ -3093,8 +2593,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             clearTimeout(userSearchTimeout);
             userSearchTimeout = setTimeout(function() {
                 const url = new URL(window.location.href);
-                if (query.length > 0) url.searchParams.set('user_search', query);
-                else url.searchParams.delete('user_search');
+                if (query.length > 0) url.searchParams.set('user_search', query); else url.searchParams.delete('user_search');
                 const filter = document.getElementById('userFilterSelect')?.value || 'all';
                 if (filter !== 'all') url.searchParams.set('user_filter', filter);
                 window.location.href = url.toString();
@@ -3104,8 +2603,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         function filterUsers() {
             const filter = document.getElementById('userFilterSelect').value;
             const url = new URL(window.location.href);
-            if (filter !== 'all') url.searchParams.set('user_filter', filter);
-            else url.searchParams.delete('user_filter');
+            if (filter !== 'all') url.searchParams.set('user_filter', filter); else url.searchParams.delete('user_filter');
             window.location.href = url.toString();
         }
 
@@ -3113,8 +2611,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             clearTimeout(requestSearchTimeout);
             requestSearchTimeout = setTimeout(function() {
                 const url = new URL(window.location.href);
-                if (query.length > 0) url.searchParams.set('request_search', query);
-                else url.searchParams.delete('request_search');
+                if (query.length > 0) url.searchParams.set('request_search', query); else url.searchParams.delete('request_search');
                 const filter = document.getElementById('requestFilterSelect')?.value || 'all';
                 if (filter !== 'all') url.searchParams.set('request_filter', filter);
                 window.location.href = url.toString();
@@ -3124,12 +2621,10 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         function filterRequests() {
             const filter = document.getElementById('requestFilterSelect').value;
             const url = new URL(window.location.href);
-            if (filter !== 'all') url.searchParams.set('request_filter', filter);
-            else url.searchParams.delete('request_filter');
+            if (filter !== 'all') url.searchParams.set('request_filter', filter); else url.searchParams.delete('request_filter');
             window.location.href = url.toString();
         }
 
-        // ===== MODAL FUNCTIONS =====
         function openApproveModal(requestId, studentName, bookTitle) {
             document.getElementById('approveRequestId').value = requestId;
             document.getElementById('approveStudentName').textContent = studentName || 'Unknown';
@@ -3150,12 +2645,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             document.getElementById('returnBorrowingId').value = borrowingId;
             document.getElementById('returnBookTitle').textContent = bookTitle || 'Book';
             let dueText = 'Due: —';
-            if (dueDate) {
-                const d = new Date(dueDate);
-                if (!isNaN(d.getTime())) {
-                    dueText = 'Due: ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-                }
-            }
+            if (dueDate) { const d = new Date(dueDate); if (!isNaN(d.getTime())) { dueText = 'Due: ' + d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }); } }
             document.getElementById('returnBookMeta').textContent = 'by ' + (studentName || 'Student') + ' (' + (studentId || 'N/A') + ') • ' + dueText;
             openModal('returnConfirmModal');
         }
@@ -3170,7 +2660,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         }
 
         function openUserActionModal(action, userId, userName, isActive) {
-            const modal = document.getElementById('userActionModal');
             const title = document.getElementById('userActionTitle');
             const message = document.getElementById('userActionMessage');
             const icon = document.getElementById('userActionIcon');
@@ -3186,9 +2675,7 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             } else {
                 const willDeactivate = !!isActive;
                 title.textContent = willDeactivate ? 'Deactivate user account?' : 'Activate user account?';
-                message.textContent = willDeactivate
-                    ? ' ' + safeName + ' will no longer be able to access the system until the account is activated again.'
-                    : ' ' + safeName + ' will be allowed to access the system again.';
+                message.textContent = willDeactivate ? ' ' + safeName + ' will no longer be able to access the system until the account is activated again.' : ' ' + safeName + ' will be allowed to access the system again.';
                 icon.textContent = willDeactivate ? '!' : '✓'; icon.classList.toggle('danger', willDeactivate);
                 submit.textContent = willDeactivate ? 'Deactivate User' : 'Activate User';
                 submit.classList.toggle('danger', willDeactivate);
@@ -3202,15 +2689,9 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             const toast = document.createElement('div');
             toast.id = 'screenToast';
             toast.className = 'screen-toast ' + (type === 'error' ? 'error' : 'success');
-            const symbol = document.createElement('span');
-            symbol.className = 'toast-symbol';
-            symbol.textContent = type === 'error' ? '!' : '✓';
-            const copy = document.createElement('div');
-            copy.className = 'toast-copy';
-            copy.textContent = message;
-            const close = document.createElement('button');
-            close.type = 'button'; close.className = 'toast-close'; close.setAttribute('aria-label', 'Close notification');
-            close.textContent = '×'; close.onclick = function(){ toast.remove(); };
+            const symbol = document.createElement('span'); symbol.className = 'toast-symbol'; symbol.textContent = type === 'error' ? '!' : '✓';
+            const copy = document.createElement('div'); copy.className = 'toast-copy'; copy.textContent = message;
+            const close = document.createElement('button'); close.type = 'button'; close.className = 'toast-close'; close.setAttribute('aria-label', 'Close notification'); close.textContent = '×'; close.onclick = function(){ toast.remove(); };
             toast.append(symbol, copy, close);
             document.body.appendChild(toast);
             window.setTimeout(function(){ if (toast.parentNode) toast.remove(); }, 5000);
@@ -3220,7 +2701,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             const now = new Date();
             const timeString = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Manila' });
             const dateString = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
-            
             const timeEl = document.getElementById('currentTime');
             const dateEl = document.getElementById('currentDate');
             const dateDisplayEl = document.getElementById('currentDateDisplay');
@@ -3231,7 +2711,6 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
         setInterval(updateClock, 1000);
         updateClock();
 
-        // ===== ROLE SIDEBAR DROPDOWNS (Librarian / Teacher / Student) =====
         function toggleSidebarGroup(groupId) {
             const group = document.getElementById(groupId);
             const button = group ? group.querySelector('.workspace-nav-toggle') : null;
@@ -3240,22 +2719,14 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             button.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
         }
 
-        // ===== SIDEBAR TOGGLE =====
         function toggleSidebar() {
             const sidebar = document.getElementById('sidebar');
             const content = document.getElementById('adminContent');
             const topHeader = document.getElementById('topHeader');
             const overlay = document.getElementById('mobileOverlay');
-            
             if (window.innerWidth <= 900) {
                 sidebar.classList.toggle('mobile-open');
-                if (sidebar.classList.contains('mobile-open')) {
-                    overlay.classList.add('active');
-                    document.body.style.overflow = 'hidden';
-                } else {
-                    overlay.classList.remove('active');
-                    document.body.style.overflow = '';
-                }
+                if (sidebar.classList.contains('mobile-open')) { overlay.classList.add('active'); document.body.style.overflow = 'hidden'; } else { overlay.classList.remove('active'); document.body.style.overflow = ''; }
             } else {
                 sidebar.classList.toggle('collapsed');
                 content.classList.toggle('collapsed');
@@ -3298,29 +2769,77 @@ $fineSettingsData = !empty($fineSettings) ? $fineSettings[0] : ['fine_per_day' =
             }, 150);
         });
 
-        function openModal(id) {
-            document.getElementById(id).classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeModal(id) {
-            document.getElementById(id).classList.remove('active');
-            document.body.style.overflow = '';
-        }
-
-        function openAddBookModal() {
-            openModal('addBookModal');
-            removeCoverImage();
-        }
+        function openModal(id) { document.getElementById(id).classList.add('active'); document.body.style.overflow = 'hidden'; }
+        function closeModal(id) { document.getElementById(id).classList.remove('active'); document.body.style.overflow = ''; }
+        function openAddBookModal() { openModal('addBookModal'); removeCoverImage(); }
 
         document.querySelectorAll('.modal-overlay').forEach(function(modal) {
             modal.addEventListener('click', function(e) {
-                if (e.target === this) {
-                    this.classList.remove('active');
-                    document.body.style.overflow = '';
-                }
+                if (e.target === this) { this.classList.remove('active'); document.body.style.overflow = ''; }
             });
         });
     </script>
+
+<div class="profile-modal-backdrop" id="adminNotificationsModal" role="dialog" aria-modal="true" aria-labelledby="adminNotificationsTitle">
+  <section class="admin-profile-modal"><div class="admin-profile-modal-head"><div class="admin-profile-avatar">♧</div><div><h2 id="adminNotificationsTitle">Notifications</h2><p>Recent library system updates</p></div></div>
+  <div style="max-height:48vh;overflow:auto;display:grid;gap:9px">
+  <?php if (!empty($notifications)): foreach (array_slice($notifications, 0, 10) as $adminNotice): ?>
+    <div class="admin-profile-item"><strong style="display:block;margin-bottom:5px"><?php echo htmlspecialchars($adminNotice['title'] ?? 'Library Notification', ENT_QUOTES, 'UTF-8'); ?></strong><p style="line-height:1.45"><?php echo htmlspecialchars($adminNotice['message'] ?? '', ENT_QUOTES, 'UTF-8'); ?></p><span style="display:block;margin-top:7px;font-size:10px"><?php echo htmlspecialchars($adminNotice['created_at'] ?? '', ENT_QUOTES, 'UTF-8'); ?> · <?php echo empty($adminNotice['is_read']) ? 'Unread' : 'Read'; ?></span></div>
+  <?php endforeach; else: ?><div class="admin-profile-item">No notifications yet.</div><?php endif; ?>
+  </div><div class="admin-profile-modal-actions"><button class="profile-close-btn" type="button" id="adminNotificationsClose">Close</button></div></section>
+</div>
+<div class="profile-modal-backdrop" id="adminProfileModal" role="dialog" aria-modal="true" aria-labelledby="adminProfileTitle">
+  <section class="admin-profile-modal">
+    <div class="admin-profile-modal-head"><div class="admin-profile-avatar"><?php echo htmlspecialchars(strtoupper(substr((string)($_SESSION['full_name'] ?? 'A'), 0, 1)), ENT_QUOTES, 'UTF-8'); ?></div><div><h2 id="adminProfileTitle"><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'System Administrator', ENT_QUOTES, 'UTF-8'); ?></h2><p>St. Agnes Academy · Library Management System</p></div></div>
+    <div class="admin-profile-grid">
+      <div class="admin-profile-item"><span>Full name</span><strong><?php echo htmlspecialchars($_SESSION['full_name'] ?? 'System Administrator', ENT_QUOTES, 'UTF-8'); ?></strong></div>
+      <div class="admin-profile-item"><span>Username</span><strong><?php echo htmlspecialchars($_SESSION['username'] ?? 'N/A', ENT_QUOTES, 'UTF-8'); ?></strong></div>
+      <div class="admin-profile-item"><span>Account role</span><strong>Administrator</strong></div>
+      <div class="admin-profile-item"><span>Account ID</span><strong><?php echo htmlspecialchars($_SESSION['user_id_display'] ?? $_SESSION['user_id'] ?? 'N/A', ENT_QUOTES, 'UTF-8'); ?></strong></div>
+    </div>
+    <div class="admin-profile-modal-actions"><button class="profile-close-btn" type="button" id="adminProfileClose">Close</button><button class="profile-settings-btn" type="button" id="adminProfileSettings">Open Settings</button></div>
+  </section>
+</div>
+<script>
+(function(){
+ const body=document.body, toggle=document.getElementById('adminThemeToggle'), icon=document.getElementById('adminThemeIcon'), label=document.getElementById('adminThemeLabel');
+ function applyTheme(theme, animate){
+   if (animate) {
+     const r = toggle?.getBoundingClientRect();
+     if (r) { body.style.setProperty('--theme-x', ((r.left + r.width/2)/innerWidth*100)+'%'); body.style.setProperty('--theme-y', ((r.top + r.height/2)/innerHeight*100)+'%'); }
+     body.classList.remove('theme-transition'); void body.offsetWidth; body.classList.add('theme-transition');
+     setTimeout(()=>body.classList.remove('theme-transition'), 650);
+   }
+   body.setAttribute('data-theme', theme);
+   body.classList.toggle('dark-mode', theme === 'dark');
+   body.classList.toggle('light-mode', theme === 'light');
+   if (toggle) { toggle.setAttribute('aria-pressed', theme === 'dark' ? 'true' : 'false'); }
+   if (icon) icon.textContent = theme === 'dark' ? '☀' : '☾';
+   if (label) label.textContent = theme === 'dark' ? 'Light mode' : 'Dark mode';
+   try { localStorage.setItem('saac-admin-theme', theme); } catch(e){}
+ }
+ let initial = 'light'; try { initial = localStorage.getItem('saac-admin-theme') || 'light'; } catch(e){}
+ applyTheme(initial, false);
+ if (toggle) toggle.addEventListener('click', () => { toggle.classList.add('theme-switching'); applyTheme(body.getAttribute('data-theme') === 'dark' ? 'light' : 'dark', true); window.setTimeout(() => toggle.classList.remove('theme-switching'), 260); });
+ const clock = document.getElementById('adminLiveClock');
+ function updateClock(){ if (clock) clock.textContent = new Intl.DateTimeFormat('en-PH',{timeZone:'Asia/Manila',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:true}).format(new Date()); }
+ updateClock(); window.setInterval(updateClock, 1000);
+ const modal = document.getElementById('adminProfileModal'), open = document.getElementById('adminProfileButton'), close = document.getElementById('adminProfileClose'), settings = document.getElementById('adminProfileSettings');
+ function closeModal(){ if (modal) modal.classList.remove('open'); }
+ if (open) open.addEventListener('click', () => modal && modal.classList.add('open'));
+ if (close) close.addEventListener('click', closeModal);
+ if (modal) modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+ document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeNotices(); } });
+ if (settings) settings.addEventListener('click', () => { window.location.href = 'admin_dashboard.php?section=settings'; });
+ const noticeModal = document.getElementById('adminNotificationsModal'), noticeOpen = document.getElementById('adminNotificationsButton'), noticeClose = document.getElementById('adminNotificationsClose');
+ function closeNotices(){ if (noticeModal) noticeModal.classList.remove('open'); }
+ if (noticeOpen) noticeOpen.addEventListener('click', () => noticeModal && noticeModal.classList.add('open'));
+ if (noticeClose) noticeClose.addEventListener('click', closeNotices);
+ if (noticeModal) noticeModal.addEventListener('click', e => { if (e.target === noticeModal) closeNotices(); });
+})();
+</script>
+<style>.theme-switching{animation:themePulse .26s ease}@keyframes themePulse{50%{transform:scale(.94);filter:brightness(1.35)}}
+body[data-theme="light"] .admin-content{background:#f8f0f5}body[data-theme="light"] .admin-content .stat-card{background:#fff}
+</style>
 </body>
 </html>

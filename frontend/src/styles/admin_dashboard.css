@@ -1539,3 +1539,41 @@
         box-shadow: none !important;
     }
 }
+
+/* ===== Unified dashboard theme override ===== */
+:root, body[data-theme="light"]{
+ --app-bg:#f5f7fb; --surface:#ffffff; --surface-2:#eef2f7;
+ --text-primary:#172033; --text-secondary:#526078; --text-muted:#718096;
+ --border-color:#dce3ec; --input-bg:#ffffff; --shadow-color:rgba(20,35,60,.10);
+ color-scheme:light;
+}
+body[data-theme="dark"]{
+ --app-bg:#0b1220; --surface:#151e2e; --surface-2:#1d293b;
+ --text-primary:#f1f5fb; --text-secondary:#c2ccda; --text-muted:#9aa9bd;
+ --border-color:#344258; --input-bg:#111a29; --shadow-color:rgba(0,0,0,.35);
+ color-scheme:dark;
+ background:var(--app-bg)!important; color:var(--text-primary)!important;
+}
+body[data-theme] :is(h1,h2,h3,h4,h5,h6,p,span,label,small,strong,em,li,dt,dd,td,th,legend){
+ color:inherit;
+}
+body[data-theme] :is(.card,.panel,.stat,.stat-card,.widget,.modal-content,.profile-container,.dropdown-menu,.notification-panel,.table-container,.content-card,.dashboard-card){
+ background-color:var(--surface)!important; color:var(--text-primary)!important; border-color:var(--border-color)!important;
+}
+body[data-theme] :is(input,select,textarea){
+ background:var(--input-bg)!important; color:var(--text-primary)!important; border-color:var(--border-color)!important;
+}
+body[data-theme] input::placeholder,body[data-theme] textarea::placeholder{color:var(--text-muted)!important;opacity:1}
+body[data-theme] :is(table,thead,tbody,tr){background-color:transparent!important;color:var(--text-primary)!important}
+body[data-theme] th{background:var(--surface-2)!important;color:var(--text-secondary)!important}
+body[data-theme] td{border-color:var(--border-color)!important}
+body[data-theme] :is(.text-muted,.muted,.subtle,.secondary-text,.description){color:var(--text-secondary)!important}
+body[data-theme="dark"] :is(.hero,.welcome-hero,.dashboard-hero){color:#fff!important}
+body[data-theme] :is(.modal,.modal-overlay,.overlay){color:var(--text-primary)}
+body[data-theme] a:not(.btn):not(.button){color:var(--accent,#7c9cff)}
+body[data-theme] :is(.btn-secondary,.btn-light,.btn-outline){background:var(--surface-2)!important;color:var(--text-primary)!important;border-color:var(--border-color)!important}
+body[data-theme] hr{border-color:var(--border-color)!important}
+body[data-theme] :is(.sidebar,.topbar,.navbar){border-color:var(--border-color)!important}
+@media(prefers-reduced-motion:reduce){body[data-theme] *,body[data-theme] *::before,body[data-theme] *::after{transition:none!important;animation:none!important}}
+/* Teacher: retain original circular profile hero; hide the extra date/time hero. */
+body.teacher-dashboard .hero-date{display:none!important}

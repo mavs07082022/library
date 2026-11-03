@@ -1439,6 +1439,77 @@ function hasValidCoverImage($coverImage) {
             z-index: 1;
         }
 
+
+/* Unified dashboard header: keep the complete bar inside the available viewport. */
+.top-header{box-sizing:border-box!important;right:0!important;width:auto!important;max-width:none!important;min-width:0!important;overflow:visible!important;gap:12px!important;padding-left:16px!important;padding-right:16px!important;}
+.top-header.collapsed{left:70px!important;right:0!important;width:auto!important;}
+.header-left-group{flex:0 0 auto!important;min-width:38px!important;}
+.header-nav-symbols{display:flex!important;align-items:center!important;justify-content:flex-end!important;flex:1 1 auto!important;min-width:0!important;max-width:100%!important;gap:7px!important;overflow:visible!important;}
+.header-nav-symbols a,.header-nav-symbols .header-action{flex:0 1 auto;min-width:36px;white-space:nowrap;}
+.hamburger-btn{position:relative!important;z-index:2!important;flex:0 0 38px!important;visibility:visible!important;opacity:1!important;}
+/* Show readable quick-action names at desktop widths, like the admin header. */
+.header-nav-symbols a[title]{width:auto!important;min-width:38px;padding:0 11px!important;gap:7px;display:inline-flex!important;flex-direction:row;}
+.header-nav-symbols a[title]::after{content:attr(title);font-size:11px;font-weight:600;letter-spacing:.1px;color:#f8eaf4;}
+@media(max-width:1100px){.header-nav-symbols a[title]{width:38px!important;min-width:38px!important;padding:0!important;}.header-nav-symbols a[title]::after{display:none;}}
+/* Improve contrast and prevent inherited muted colors from hiding dashboard text. */
+.top-header,.top-header *{color:inherit;}
+.header-nav-symbols a,.header-nav-symbols .header-action{color:#f8eaf4!important;}
+.header-nav-symbols a span,.header-nav-symbols .action-label{color:inherit!important;}
+@media(max-width:1100px){
+ .top-header{gap:8px!important;padding-left:10px!important;padding-right:10px!important;}
+ .header-nav-symbols{gap:4px!important;}
+ .header-nav-symbols .action-label{display:none!important;}
+ .header-nav-symbols .header-action{width:38px!important;min-width:38px!important;padding:0!important;}
+}
+@media(max-width:900px){
+ .top-header,.top-header.collapsed{left:0!important;right:0!important;width:100%!important;max-width:100vw!important;}
+}
+@media(max-width:600px){
+ .top-header,.top-header.collapsed{left:0!important;right:0!important;width:100%!important;padding:0 8px!important;gap:6px!important;}
+ .header-nav-symbols{gap:2px!important;overflow-x:auto!important;overflow-y:hidden!important;scrollbar-width:none!important;}
+ .header-nav-symbols::-webkit-scrollbar{display:none!important;}
+ .header-nav-symbols a,.header-nav-symbols .header-action{width:32px!important;min-width:32px!important;height:34px!important;min-height:34px!important;}
+ .header-clock{display:none!important;}
+}
+
+
+/* Strong contrast overrides for legacy inline text colors */
+body[data-theme="dark"] .student-content :is(h1,h2,h3,h4,p,label,small,td,li,.book-title,.section-title),
+body[data-theme="dark"] .librarian-content :is(h1,h2,h3,h4,p,label,small,td,li,.book-title,.section-title),
+body[data-theme="dark"] .content :is(h1,h2,h3,h4,p,label,small,td,li,.book-title,.section-title){color:#f3edf5!important;}
+body[data-theme="dark"] .student-content .muted,body[data-theme="dark"] .librarian-content .muted,body[data-theme="dark"] .content .muted{color:#c0b1c4!important;}
+/* Account modal shared presentation */
+.profile-modal-backdrop{display:none;position:fixed;inset:0;z-index:5000;background:rgba(8,3,10,.68);backdrop-filter:blur(5px);align-items:center;justify-content:center;padding:18px;}
+.profile-modal-backdrop.open{display:flex;animation:modalFade .18s ease-out;}
+@keyframes modalFade{from{opacity:0}to{opacity:1}}
+.profile-modal-backdrop .profile-container{width:min(560px,100%);max-height:82vh;overflow:auto;background:#fff;border-radius:16px;padding:24px;box-shadow:0 24px 80px rgba(0,0,0,.3);}
+/* ===== Shared dashboard theme + header actions enhancement ===== */
+.top-header,.topbar{display:flex;align-items:center;gap:12px;}
+.header-nav-symbols,.toplinks{margin-left:auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0;}
+.header-nav-symbols .header-action,.toplinks .header-action{position:relative;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:38px;padding:0 13px;border:1px solid rgba(255,255,255,.13);border-radius:10px;background:rgba(255,255,255,.055);color:#f8eaf4!important;text-decoration:none;font-family:inherit;font-size:12px;font-weight:600;white-space:nowrap;cursor:pointer;transition:background .2s,border-color .2s,transform .2s,box-shadow .2s;}
+.header-nav-symbols .header-action:hover,.toplinks .header-action:hover{background:rgba(212,22,136,.2);border-color:rgba(255,1,153,.45);transform:translateY(-1px);box-shadow:0 5px 16px rgba(180,15,125,.15);}
+.header-action .action-icon{font-size:15px;line-height:1}.header-action.logout-action{background:#b40f7d;border-color:#b40f7d;color:#fff!important}.header-action.logout-action:hover{background:#d41688}
+.header-action .header-badge{position:absolute;top:-6px;right:-5px;min-width:17px;height:17px;padding:0 4px;border-radius:20px;background:#ff0199;color:#fff!important;font-size:9px;font-weight:800;display:grid;place-items:center;border:2px solid #08080a}
+.theme-action{min-width:105px}
+body{transition:background-color .35s ease,color .35s ease}
+body.theme-transition::before{content:"";position:fixed;z-index:99999;inset:0;pointer-events:none;background:radial-gradient(circle at var(--theme-x,90%) var(--theme-y,5%),rgba(212,22,136,.22),transparent 48%);animation:themeReveal .55s ease-out forwards}
+@keyframes themeReveal{from{opacity:1;transform:scale(.65)}to{opacity:0;transform:scale(1.8)}}
+body[data-theme="dark"]{background:#101019!important;color:#f3edf5!important;color-scheme:dark;}
+body[data-theme="dark"] .student-content,body[data-theme="dark"] .librarian-content,body[data-theme="dark"] .main,body[data-theme="dark"] .content,body[data-theme="dark"] .dashboard-content{background:#101019!important;color:#f3edf5!important;}
+body[data-theme="dark"] .student-content h1,body[data-theme="dark"] .student-content h2,body[data-theme="dark"] .student-content h3,body[data-theme="dark"] .student-content p,body[data-theme="dark"] .student-content label,body[data-theme="dark"] .librarian-content h1,body[data-theme="dark"] .librarian-content h2,body[data-theme="dark"] .librarian-content h3,body[data-theme="dark"] .librarian-content p,body[data-theme="dark"] .librarian-content label,body[data-theme="dark"] .content h1,body[data-theme="dark"] .content h2,body[data-theme="dark"] .content h3,body[data-theme="dark"] .content p,body[data-theme="dark"] .content label{color:#f3edf5!important;}
+body[data-theme="dark"] .student-content .card,body[data-theme="dark"] .student-content .panel,body[data-theme="dark"] .student-content .stat-card,body[data-theme="dark"] .student-content .profile-container,body[data-theme="dark"] .librarian-content .card,body[data-theme="dark"] .librarian-content .panel,body[data-theme="dark"] .librarian-content .stat-card,body[data-theme="dark"] .librarian-content .content-card,body[data-theme="dark"] .content .panel,body[data-theme="dark"] .content .stat,body[data-theme="dark"] .content .book-card,body[data-theme="dark"] .content .empty,body[data-theme="dark"] .content .profile-edit-panel,body[data-theme="dark"] .content .profile-account-summary{background:#1d1a25!important;color:#f3edf5!important;border-color:#3d3042!important;box-shadow:0 8px 26px rgba(0,0,0,.2)!important;}
+body[data-theme="dark"] .student-content table,body[data-theme="dark"] .librarian-content table,body[data-theme="dark"] .content table{background:transparent!important;color:#f3edf5!important;}
+body[data-theme="dark"] .student-content th,body[data-theme="dark"] .librarian-content th,body[data-theme="dark"] .content th{background:#2b2230!important;color:#f8eaf4!important;border-color:#49374b!important;}
+body[data-theme="dark"] .student-content td,body[data-theme="dark"] .librarian-content td,body[data-theme="dark"] .content td{color:#e9deeb!important;border-color:#3b303e!important;}
+body[data-theme="dark"] input,body[data-theme="dark"] select,body[data-theme="dark"] textarea{background:#211b29!important;color:#fff!important;border-color:#514052!important;color-scheme:dark;}
+body[data-theme="dark"] .subtle,body[data-theme="dark"] .header-date,body[data-theme="dark"] .empty p,body[data-theme="dark"] .book-info p,body[data-theme="dark"] .footer-note{color:#c0b1c4!important;}
+body[data-theme="dark"] .dashboard-header,body[data-theme="dark"] .hero{background:linear-gradient(120deg,#17111e 0%,#3a1740 55%,#8e176b 100%)!important;color:#fff!important;}
+body[data-theme="dark"] .dashboard-header *,body[data-theme="dark"] .hero *{color:#fff!important;}
+body[data-theme="dark"] .notice,body[data-theme="dark"] .librarian-notice,body[data-theme="dark"] .request-item,body[data-theme="dark"] .fine-card{background:#251e2b!important;color:#f3edf5!important;border-color:#49374b!important;}
+body[data-theme="dark"] a:not(.btn):not(.logout):not(.logout-btn):not(.header-action){color:#f0a6d8;}
+body[data-theme="dark"] .profile-modal-backdrop .profile-container,body[data-theme="dark"] .modal-box,body[data-theme="dark"] .modal-content{background:#1d1a25!important;color:#f3edf5!important;border:1px solid #49374b;}
+@media(max-width:760px){.header-nav-symbols,.toplinks{gap:4px;}.header-nav-symbols .header-action,.toplinks .header-action{width:36px;min-width:36px;height:36px;padding:0;font-size:0}.header-action .action-icon{font-size:15px}.header-action .action-label{display:none}.theme-action{min-width:36px}.topbar{padding:0 10px!important}}
+@media(prefers-reduced-motion:reduce){body,.header-action{transition:none!important}body.theme-transition::before{animation:none}}
 </style>
 </head>
 <body>
@@ -1449,21 +1520,11 @@ function hasValidCoverImage($coverImage) {
             </button>
             
         </div>
-        <nav class="header-nav-symbols">
-            <a href="librarian_dashboard.php?section=dashboard" class="<?php echo $section === 'dashboard' ? 'active' : ''; ?>" title="Dashboard">
-                <span>🗠</span>
-            </a>
-            <a href="librarian_dashboard.php?section=books" class="<?php echo $section === 'books' ? 'active' : ''; ?>" title="Books">
-                <span>🕮</span>
-            </a>
-            <a href="librarian_dashboard.php?section=borrowings" class="<?php echo $section === 'borrowings' ? 'active' : ''; ?>" title="Borrowings">
-                <span>🕮🡪</span>
-            </a>
-            <a href="librarian_dashboard.php?section=fines" class="<?php echo $section === 'fines' ? 'active' : ''; ?>" title="Fines">
-                <span>₱ </span>
-            </a>
-            <a href="librarian_dashboard.php?section=requests" class="<?php echo $section === 'requests' ? 'active' : ''; ?>" title="Teacher Requests"><span>▤</span></a>
-            <a href="librarian_dashboard.php?section=notifications" class="<?php echo $section === 'notifications' ? 'active' : ''; ?>" title="Notifications"><span>♧</span></a>
+        <nav class="header-nav-symbols" aria-label="Account actions">
+            <a class="header-action" href="librarian_dashboard.php?section=notifications" title="Notifications"><span class="action-icon">♧</span><span class="action-label">Notifications</span><?php if (!empty($unreadLibrarianNotifications)): ?><span class="header-badge"><?=count($unreadLibrarianNotifications)?></span><?php endif; ?></a>
+            <button class="header-action" type="button" data-profile-open title="Profile"><span class="action-icon">◉</span><span class="action-label">Profile</span></button>
+            <button class="header-action theme-action" type="button" data-theme-toggle aria-pressed="false" title="Toggle theme"><span class="action-icon">☾</span><span class="action-label">Dark mode</span></button>
+            <a class="header-action logout-action" href="../admin_logout.php" title="Logout"><span class="action-icon">↪</span><span class="action-label">Logout</span></a>
         </nav>
     </header>
 
@@ -1511,11 +1572,7 @@ function hasValidCoverImage($coverImage) {
                 </a>
             </div>
             <?php endif; ?>
-            <div class="sidebar-footer">
-                <a href="../admin_logout.php" class="logout-btn">
-                    <span class="logout-text">Logout</span>
-                </a>
-            </div>
+
         </div>
 
         <div class="mobile-overlay" id="mobileOverlay" onclick="toggleMobileMenu()"></div>
@@ -2290,5 +2347,34 @@ function hasValidCoverImage($coverImage) {
         setInterval(updateClock, 1000);
         updateClock();
     </script>
+
+<div class="profile-modal-backdrop" id="dashboardProfileModal" role="dialog" aria-modal="true" aria-labelledby="librarianProfileTitle"><section class="profile-container" style="width:min(500px,100%)"><h2 id="librarianProfileTitle">My Profile</h2><p><strong><?=htmlspecialchars($_SESSION['full_name'] ?? 'Librarian', ENT_QUOTES, 'UTF-8')?></strong></p><p>ID: <?=htmlspecialchars($_SESSION['user_id_display'] ?? 'N/A', ENT_QUOTES, 'UTF-8')?></p><p>Role: Librarian</p><div style="display:flex;justify-content:flex-end;margin-top:18px"><button class="btn-secondary" type="button" data-modal-close>Close</button></div></section></div>
+
+<script>
+(function(){
+ const body=document.body;
+ const toggle=document.querySelector('[data-theme-toggle]');
+ const icon=toggle?.querySelector('.action-icon');
+ const label=toggle?.querySelector('.action-label');
+ let saved='light'; try{saved=localStorage.getItem('library-dashboard-theme')||'light'}catch(e){}
+ function applyTheme(theme,animate=false){
+   if(animate){const r=toggle?.getBoundingClientRect();if(r){body.style.setProperty('--theme-x',((r.left+r.width/2)/innerWidth*100)+'%');body.style.setProperty('--theme-y',((r.top+r.height/2)/innerHeight*100)+'%')}body.classList.remove('theme-transition');void body.offsetWidth;body.classList.add('theme-transition');setTimeout(()=>body.classList.remove('theme-transition'),650)}
+   body.setAttribute('data-theme',theme);
+   if(toggle){toggle.setAttribute('aria-pressed',theme==='dark'?'true':'false');toggle.setAttribute('aria-label',theme==='dark'?'Switch to light mode':'Switch to dark mode')}
+   if(icon)icon.textContent=theme==='dark'?'☀':'☾';
+   if(label)label.textContent=theme==='dark'?'Light mode':'Dark mode';
+   try{localStorage.setItem('library-dashboard-theme',theme)}catch(e){}
+ }
+ applyTheme(saved,false);
+ toggle?.addEventListener('click',()=>applyTheme(body.getAttribute('data-theme')==='dark'?'light':'dark',true));
+ const profileButton=document.querySelector('[data-profile-open]'),profileModal=document.getElementById('dashboardProfileModal');
+ const closeProfile=()=>profileModal?.classList.remove('open');
+ profileButton?.addEventListener('click',()=>profileModal?.classList.add('open'));
+ profileModal?.querySelector('[data-modal-close]')?.addEventListener('click',closeProfile);
+ profileModal?.addEventListener('click',e=>{if(e.target===profileModal)closeProfile()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape')closeProfile()});
+})();
+</script>
+
 </body>
 </html>
